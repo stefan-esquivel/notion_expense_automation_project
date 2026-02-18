@@ -1,0 +1,16 @@
+# PDF Processing
+pdfplumber==0.11.0
+PyPDF2==3.0.1
+
+# Notion API
+notion-client==2.2.1
+
+# Date/Time Parsing
+python-dateutil==2.8.2
+
+# CLI Interface
+rich==13.7.0
+inquirer==3.2.4
+
+# Utilities
+python-dotenv==1.0.0

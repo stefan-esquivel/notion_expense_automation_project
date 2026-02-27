@@ -58,10 +58,17 @@ pip install -r requirements.txt
    ```
 4. Repeat for Split Details Table
 
+#### Get the Balances Page ID:
+1. Open your Balances Table in Notion
+2. Click into the single row (the balances page)
+3. Click "Share" → "Copy link"
+4. Extract the page ID from the URL (the long string after the last `/`)
+
 #### Connect Integration to Databases:
-1. Open each database in Notion
+1. Open each database in Notion (Expense Table, Split Details Table, Balances Table)
 2. Click "•••" (top right) → "Add connections"
 3. Select your "Expense Automation" integration
+   > Note: The Balances Table connection is still needed for the Balances Page ID to work.
 
 ### 5. Configure Environment Variables
 
@@ -78,8 +85,12 @@ NOTION_API_TOKEN=secret_xxxxxxxxxxxxxxxxxxxxx
 EXPENSE_TABLE_DATABASE_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 SPLIT_DETAILS_DATABASE_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
-YOUR_NAME=Stefan Esquivel
-PARTNER_NAME=Lydu
+# The single row in your Balances table (page ID, not database ID)
+BALANCES_PAGE_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Use aliases — these don't have to be real names
+YOUR_NAME=You
+PARTNER_NAME=Partner
 
 INPUT_FOLDER=receipts/input
 PROCESSED_FOLDER=receipts/processed
@@ -115,6 +126,7 @@ The system will:
 
 - **Expense Table**: New entry with merchant, date, amount, and payer
 - **Split Details Table**: Linked entry showing the other person's share (debt)
+- **Balances Table**: Split entry linked to the single Balances page to update running totals
 - **Organized Files**: Receipts moved to `receipts/processed/YYYY-MM/` with descriptive names
 
 ## Workflow Example
@@ -124,13 +136,14 @@ The system will:
 **Process:**
 1. System extracts: "Walmart Order - $92.01 - Jan 18, 2026"
 2. You review and confirm the information
-3. You select: "Stefan Esquivel" paid
-4. System calculates: Lydia owes $46.01
+3. You select: `YOU` paid (your alias from `YOUR_NAME`)
+4. You confirm the split percentage (default 50%)
 5. You confirm and send to Notion
 
 **Output:**
-- **Expense Entry**: "Walmart Order" - CA$92.01 - Paid by Stefan
-- **Split Entry**: "Lydia's Walmart Food Split" - CA$46.01 owed by Lydia
+- **Expense Entry**: "Walmart Order" - CA$92.01 - Paid by `YOU`
+- **Split Entry**: "`PARTNER`'s Walmart Food Split" - 50% share — Notion calculates the dollar amount via rollup from the Expense entry
+- **Balances Entry**: Split linked to the Balances page
 - **File**: Moved to `receipts/processed/2026-01/2026-01-18_Walmart_Order_$92.01.pdf`
 
 ## File Structure
@@ -172,12 +185,12 @@ The system automatically detects and categorizes:
 
 ## Split Title Patterns
 
-The system generates split titles following your existing Notion patterns:
+The system generates split titles following your existing Notion patterns (using your configured name aliases):
 
-- Food: "Lydia's Walmart Food Split (Shrimp)"
-- Bills: "Stefan's Electrical Bill Split (Jan)"
-- Subscriptions: "Lydia's Netflix Payment (Feb)"
-- Rent: "Stefan's Rent Split (Feb)"
+- Food: "`PARTNER`'s Walmart Food Split (Shrimp)"
+- Bills: "`YOU`'s Electrical Bill Split (Jan)"
+- Subscriptions: "`PARTNER`'s Netflix Payment (Feb)"
+- Rent: "`YOU`'s Rent Split (Feb)"
 
 ## Troubleshooting
 

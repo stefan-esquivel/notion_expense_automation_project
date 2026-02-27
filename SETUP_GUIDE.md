@@ -6,7 +6,7 @@ This guide will walk you through setting up the Notion Expense Automation system
 
 - [ ] Python 3.8+ installed on your computer
 - [ ] Notion account with workspace access
-- [ ] Existing Expense Table and Split Details Table in Notion
+- [ ] Existing Expense Table, Split Details Table, and Balances Table in Notion
 - [ ] PDF receipts ready to process
 
 ## Step 1: Notion Integration Setup
@@ -39,9 +39,22 @@ This guide will walk you through setting up the Notion Expense Automation system
 3. Extract the database ID from the URL (same format as above)
 4. Save this ID
 
+#### For Balances Table:
+1. Open your **Balances Table** in Notion
+2. Click **"Share"** → **"Copy link"**
+3. Extract the database ID from the URL
+4. Save this ID
+
+#### For Balances Page ID:
+1. Open your **Balances Table** in Notion
+2. Click into the **single row** (the balances tracking page)
+3. Click **"Share"** → **"Copy link"**
+4. The page ID is the long string at the end of the URL (after the last `/`, before any `?`)
+5. Save this ID — this is different from the database ID above
+
 ### 1.3 Connect Integration to Databases
 
-**For EACH database (Expense Table and Split Details Table):**
+**For EACH database (Expense Table, Split Details Table, and Balances Table):**
 
 1. Open the database in Notion
 2. Click the **"•••"** menu (top right corner)
@@ -104,16 +117,23 @@ Open `.env` in a text editor and fill in your values:
 NOTION_API_TOKEN=secret_xxxxxxxxxxxxxxxxxxxxx
 
 # Paste your Expense Table database ID from Step 1.2
-EXPENSE_TABLE_DATABASE_ID=27361377bcc3807b883be5176931dea4
+EXPENSE_TABLE_DATABASE_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 # Paste your Split Details Table database ID from Step 1.2
-SPLIT_DETAILS_DATABASE_ID=27361377bcc3805b8815cc38f890f30f
+SPLIT_DETAILS_DATABASE_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
-# Your name (as it appears in Notion)
-YOUR_NAME=Stefan Esquivel
+# Paste your Balances Table database ID from Step 1.2
+BALANCES_DATABASE_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
-# Your partner's name (as it appears in Notion)
-PARTNER_NAME=Lydu
+# Paste the single Balances row page ID from Step 1.2
+BALANCES_PAGE_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Your name alias — used in split titles and to match Notion "Paid By" / "Person" fields
+# Can be any alias, but must match exactly what's in Notion
+YOUR_NAME=You
+
+# Your partner's name alias — same rules as above
+PARTNER_NAME=Partner
 
 # Leave these as default or customize
 INPUT_FOLDER=receipts/input
@@ -123,8 +143,9 @@ DEFAULT_SPLIT_PERCENTAGE=50.0
 
 **Important Notes:**
 - Replace `secret_xxxxx` with your actual token
-- Replace the database IDs with your actual IDs
-- Names must match exactly as they appear in your Notion "Paid By" and "Person" fields
+- Replace all IDs with your actual values
+- `YOUR_NAME` and `PARTNER_NAME` are aliases — they must match exactly what appears in your Notion "Paid By" and "Person" fields
+- `BALANCES_PAGE_ID` is a **page ID** (a specific row), not a database ID
 - Don't add quotes around values
 
 ### 3.3 Verify Folder Structure
@@ -165,9 +186,10 @@ The application will:
 
 ### 4.4 Verify in Notion
 
-1. Open your **Expense Table** - you should see a new entry
-2. Open your **Split Details Table** - you should see a linked split entry
-3. Check that the amounts are correct (50/50 split by default)
+1. Open your **Expense Table** — you should see a new entry
+2. Open your **Split Details Table** — you should see a linked split entry
+3. Open your **Balances Table** — the single row should now link to the new split entry
+4. Check that the amounts are correct (50/50 split by default)
 
 ## Step 5: Daily Usage
 

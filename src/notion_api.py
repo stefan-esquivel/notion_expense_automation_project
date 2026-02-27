@@ -15,11 +15,12 @@ NOTION_VERSION = "2025-09-03"
 class NotionExpenseClient:
     """Handle all Notion API operations for expense tracking."""
     
-    def __init__(self, api_token: str, expense_db_id: str, split_db_id: str):
+    def __init__(self, api_token: str, expense_db_id: str, split_db_id: str, balance_page_id: str):
         self.client = Client(auth=api_token)
         self.api_token = api_token
         self.expense_db_id = expense_db_id
         self.split_db_id = split_db_id
+        self.balance_page_id = balance_page_id
         
         # Map person names to Notion user IDs
         self.user_id_map = {
@@ -214,30 +215,45 @@ class NotionExpenseClient:
             )
             split_page_id = response["id"]
             
-            # Link the split entry to the expense entry
-            self._link_split_to_expense(expense_page_id, split_page_id)
+            # Link the split entry to the expense entry (critical: orphaned split is a data integrity issue)
+            self._link_pages(source_page_id=expense_page_id, target_page_id=split_page_id, table_name=Config.EXPENSE_RELATION_PROPERTY, critical=True)
+
+            # Link the split entry to the balance entry (non-critical: warn only)
+            self._link_pages(source_page_id=self.balance_page_id, target_page_id=split_page_id, table_name=Config.BALANCES_RELATION_PROPERTY, critical=False)
             
             return split_page_id
         except APIResponseError as e:
             raise Exception(f"Failed to create split entry: {e}")
     
-    def _link_split_to_expense(self, expense_page_id: str, split_page_id: str):
-        """Link a split details entry to its parent expense entry."""
+    def _link_pages(self, source_page_id: str, target_page_id: str, table_name: str, critical: bool = False):
+        """Append target_page_id to the relation property `table_name` on source_page_id, deduplicating existing entries.
+
+        Args:
+            critical: If True, re-raises APIResponseError on failure instead of only warning.
+        """
         try:
-            # Update the expense entry to link to the split
+            # Get existing relations
+            page = self.client.pages.retrieve(page_id=source_page_id)
+            existing_relations = page["properties"][table_name]["relation"]
+
+            # Avoid duplicates
+            existing_ids = {r["id"] for r in existing_relations}
+            if target_page_id not in existing_ids:
+                existing_relations.append({"id": target_page_id})
+
+            # Send full updated list
             self.client.pages.update(
-                page_id=expense_page_id,
+                page_id=source_page_id,
                 properties={
-                    "Split Details Table": {
-                        "relation": [
-                            {"id": split_page_id}
-                        ]
+                    table_name: {
+                        "relation": existing_relations
                     }
                 }
             )
-        except APIResponseError as e:
-            # Non-critical error, log but don't fail
-            print(f"Warning: Failed to link split to expense: {e}")
+        except (APIResponseError, KeyError) as e:
+            if critical:
+                raise Exception(f"Failed to link source page {source_page_id} to target page {target_page_id}: {e}")
+            print(f"Warning: Failed to link source page {source_page_id} to target page {target_page_id}: {e}")
     
     def generate_split_title(
         self,
@@ -298,6 +314,7 @@ class NotionExpenseClient:
             # Try to retrieve database info
             self.client.databases.retrieve(database_id=self.expense_db_id)
             self.client.databases.retrieve(database_id=self.split_db_id)
+            self.client.pages.retrieve(page_id=self.balance_page_id)
             return True
         except APIResponseError as e:
             print(f"Notion API connection test failed: {e}")

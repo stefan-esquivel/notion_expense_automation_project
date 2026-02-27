@@ -40,7 +40,8 @@ class ExpenseAutomation:
         self.notion_client = NotionExpenseClient(
             Config.NOTION_API_TOKEN,
             Config.EXPENSE_TABLE_DATABASE_ID,
-            Config.SPLIT_DETAILS_DATABASE_ID
+            split_db_id=Config.SPLIT_DETAILS_DATABASE_ID,
+            balance_page_id=Config.BALANCES_PAGE_ID
         )
     
     def process_receipt(self, pdf_path: Path) -> bool:

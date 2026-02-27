@@ -71,15 +71,23 @@ The Notion Expense Automation system is a Python-based application that automate
 ┌─────────────────────────────────────────────────────────────────┐
 │                         NOTION API                               │
 │                                                                   │
-│  ┌──────────────────┐              ┌──────────────────────┐    │
-│  │  Expense Table   │◄─────────────┤ Split Details Table  │    │
-│  │                  │   Relation    │                      │    │
-│  │ • Merchant       │               │ • Title              │    │
-│  │ • Date           │               │ • Person (owes)      │    │
-│  │ • Amount         │               │ • Share Amount       │    │
-│  │ • Paid By        │               │ • Date               │    │
-│  │ • Receipt        │               │ • Balances (link)    │    │
-│  └──────────────────┘               └──────────────────────┘    │
+│  ┌──────────────────┐   Relation   ┌──────────────────────┐    │
+│  │  Expense Table   │◄─────────────┤  Split Details Table │    │
+│  │                  │              │                      │    │
+│  │ • Merchant       │              │ • Title              │    │
+│  │ • Date           │              │ • Person (owes)      │    │
+│  │ • Amount         │              │ • Share Amount       │    │
+│  │ • Paid By        │              │ • Share Percent      │    │
+│  │ • Receipt        │              └──────────┬───────────┘    │
+│  └──────────────────┘                         │ Relation        │
+│                                               ▼                  │
+│                                  ┌──────────────────────┐       │
+│                                  │   Balances Table     │       │
+│                                  │  (single page/row)   │       │
+│                                  │                      │       │
+│                                  │ • Running totals     │       │
+│                                  │ • Linked splits      │       │
+│                                  └──────────────────────┘       │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -113,8 +121,9 @@ The Notion Expense Automation system is a Python-based application that automate
 
 **Key Configuration**:
 - Notion API credentials
-- Database IDs
-- User names
+- Database IDs (`EXPENSE_TABLE_DATABASE_ID`, `SPLIT_DETAILS_DATABASE_ID`, `BALANCES_DATABASE_ID`)
+- Balances page ID (`BALANCES_PAGE_ID`) — the single row in the Balances table
+- User name aliases (`YOUR_NAME`, `PARTNER_NAME`) — must match Notion field values exactly
 - Folder paths
 - Split percentage
 
@@ -150,21 +159,29 @@ The Notion Expense Automation system is a Python-based application that automate
 YYYY-MM-DD_Merchant_Description_$Amount.pdf
 ```
 
-### 4. Notion Client (`src/notion_client.py`)
+### 4. Notion Client (`src/notion_api.py`)
 **Purpose**: Interface with Notion API
 
 **Responsibilities**:
 - Create expense table entries
 - Create split details entries
-- Link split entries to expense entries
+- Link pages via relations using the generic `_link_pages(source, target, property_name)` method
+- Link split entries to their parent expense entry (`"Split Details Table"` relation)
+- Link split entries to the single Balances page (`"Split Details Table"` relation on the balance page)
 - Generate split titles following naming patterns
 - Test API connection
 - Handle API errors
 
-**Split Title Patterns**:
-- Food: `"[Person]'s Walmart Food Split (Item)"`
-- Bills: `"[Person]'s Electrical Bill Split (Month)"`
-- Subscriptions: `"[Person]'s Netflix Payment (Month)"`
+**Key Design — `_link_pages()`**:
+- Generic method: takes `source_page_id`, `target_page_id`, and `table_name` (the relation property name)
+- Fetches existing relations first to avoid overwriting them (append-safe)
+- Deduplicates before updating
+- Used for both expense→split and balance→split links
+
+**Split Title Patterns** (uses name aliases from `YOUR_NAME` / `PARTNER_NAME`):
+- Food: `"[Alias]'s Walmart Food Split (Item)"`
+- Bills: `"[Alias]'s Electrical Bill Split (Month)"`
+- Subscriptions: `"[Alias]'s Netflix Payment (Month)"`
 
 ### 5. User Interface (`src/ui.py`)
 **Purpose**: Handle all user interactions
@@ -223,27 +240,32 @@ Parsed Data → User Review → Confirmed Data → Notion Entries
 
 ## Split Logic
 
-### Scenario: You pay $100 at Walmart
+### Scenario: YOU pay $100 at Walmart
 
 **Input**:
 - Amount: $100.00
-- Paid By: Stefan Esquivel
+- Paid By: `YOU` (your alias from `YOUR_NAME`)
 
 **Processing**:
 - Calculate split: $100.00 × 50% = $50.00
-- Non-payer: Lydu
+- Non-payer: `PARTNER` (your alias from `PARTNER_NAME`)
 
 **Output**:
 1. **Expense Entry**:
    - Merchant: "Walmart Order"
    - Amount: CA$100.00
-   - Paid By: Stefan Esquivel
+   - Paid By: `YOU`
+   - Linked to: Split entry (via `"Split Details Table"` relation)
 
 2. **Split Entry** (ONE entry only):
-   - Title: "Lydia's Walmart Food Split"
-   - Person: Lydu
+   - Title: "`PARTNER`'s Walmart Food Split"
+   - Person: `PARTNER`
    - Share Amount: CA$50.00
-   - Meaning: Lydu owes Stefan $50.00
+   - Meaning: `PARTNER` owes `YOU` $50.00
+   - Linked to: Expense entry AND Balances page
+
+3. **Balances Page** (single row, updated):
+   - New split entry appended to `"Split Details Table"` relation
 
 ## Error Handling
 

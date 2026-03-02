@@ -1,0 +1,39 @@
+{
+  "merchant": "Sample Coffee Shop",
+  "date": "2026-03-02",
+  "amount": 45.50,
+  "currency": "USD",
+  "category": "Food & Dining",
+  "payment_method": "Credit Card",
+  "items": [
+    {
+      "description": "Latte",
+      "quantity": 2,
+      "unit_price": 5.50,
+      "total": 11.00
+    },
+    {
+      "description": "Croissant",
+      "quantity": 3,
+      "unit_price": 4.50,
+      "total": 13.50
+    },
+    {
+      "description": "Sandwich",
+      "quantity": 2,
+      "unit_price": 8.50,
+      "total": 17.00
+    }
+  ],
+  "subtotal": 41.50,
+  "tax": 3.32,
+  "tip": 0.68,
+  "total": 45.50,
+  "receipt_number": "RCP-2026-001",
+  "location": {
+    "address": "123 Main St",
+    "city": "Toronto",
+    "state": "ON",
+    "zip": "M5H 2N2"
+  }
+}

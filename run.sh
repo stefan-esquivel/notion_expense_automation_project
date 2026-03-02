@@ -28,5 +28,3 @@ python src/main.py
 
 # Deactivate virtual environment
 deactivate
-
-# Made with Bob

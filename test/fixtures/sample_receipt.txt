@@ -1,0 +1,37 @@
+SAMPLE COFFEE SHOP
+123 Main St
+Toronto, ON M5H 2N2
+Tel: (416) 555-0123
+
+Receipt #: RCP-2026-001
+Date: March 2, 2026
+Time: 10:30 AM
+
+Server: John D.
+
+ITEMS:
+----------------------------------------
+2x Latte                    $11.00
+   @ $5.50 each
+
+3x Croissant                $13.50
+   @ $4.50 each
+
+2x Sandwich                 $17.00
+   @ $8.50 each
+
+----------------------------------------
+Subtotal:                   $41.50
+Tax (8%):                    $3.32
+Tip:                         $0.68
+----------------------------------------
+TOTAL:                      $45.50
+----------------------------------------
+
+Payment Method: Credit Card
+Card: **** **** **** 1234
+
+Thank you for your visit!
+Please come again!
+
+www.samplecoffeeshop.com

@@ -1,0 +1,112 @@
+{
+  "expense_response": {
+    "object": "page",
+    "id": "12345678-1234-1234-1234-123456789abc",
+    "created_time": "2026-03-02T21:00:00.000Z",
+    "last_edited_time": "2026-03-02T21:00:00.000Z",
+    "archived": false,
+    "properties": {
+      "Date": {
+        "id": "date",
+        "type": "date",
+        "date": {
+          "start": "2026-03-02",
+          "end": null
+        }
+      },
+      "Merchant": {
+        "id": "merchant",
+        "type": "title",
+        "title": [
+          {
+            "type": "text",
+            "text": {
+              "content": "Sample Coffee Shop"
+            }
+          }
+        ]
+      },
+      "Amount": {
+        "id": "amount",
+        "type": "number",
+        "number": 45.50
+      },
+      "Category": {
+        "id": "category",
+        "type": "select",
+        "select": {
+          "name": "Food & Dining",
+          "color": "green"
+        }
+      },
+      "Payment Method": {
+        "id": "payment",
+        "type": "select",
+        "select": {
+          "name": "Credit Card",
+          "color": "blue"
+        }
+      }
+    }
+  },
+  "split_response": {
+    "object": "page",
+    "id": "87654321-4321-4321-4321-cba987654321",
+    "created_time": "2026-03-02T21:00:00.000Z",
+    "last_edited_time": "2026-03-02T21:00:00.000Z",
+    "archived": false,
+    "properties": {
+      "Person": {
+        "id": "person",
+        "type": "select",
+        "select": {
+          "name": "Person A",
+          "color": "purple"
+        }
+      },
+      "Amount": {
+        "id": "amount",
+        "type": "number",
+        "number": 22.75
+      },
+      "Expense": {
+        "id": "expense",
+        "type": "relation",
+        "relation": [
+          {
+            "id": "12345678-1234-1234-1234-123456789abc"
+          }
+        ]
+      },
+      "Description": {
+        "id": "description",
+        "type": "rich_text",
+        "rich_text": [
+          {
+            "type": "text",
+            "text": {
+              "content": "Split for coffee shop expense"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "database_query_response": {
+    "object": "list",
+    "results": [
+      {
+        "object": "page",
+        "id": "12345678-1234-1234-1234-123456789abc"
+      }
+    ],
+    "next_cursor": null,
+    "has_more": false
+  },
+  "error_response": {
+    "object": "error",
+    "status": 400,
+    "code": "validation_error",
+    "message": "body failed validation: body.properties.Amount.number should be a number, instead was `\"invalid\"`."
+  }
+}

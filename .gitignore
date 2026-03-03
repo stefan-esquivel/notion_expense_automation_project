@@ -49,3 +49,6 @@ Thumbs.db
 .coverage
 htmlcov/
 .bob/mcp.json
+.bobignore
+
+/mutants

@@ -52,6 +52,27 @@ class FileOrganizer:
         text = ''.join(c for c in text if c.isalnum() or c in ('_', '-'))
         return text
     
+    def _sanitize_vendor_name(self, vendor_name: str) -> str:
+        """
+        Sanitize vendor name for use as folder name.
+        Returns 'unknown' if vendor name is empty or invalid.
+        """
+        if not vendor_name or not vendor_name.strip():
+            return 'unknown'
+        
+        # Convert to lowercase and replace spaces with underscores
+        sanitized = vendor_name.lower().strip()
+        sanitized = sanitized.replace(' ', '_')
+        
+        # Remove special characters, keep only alphanumeric, underscore, and hyphen
+        sanitized = ''.join(c for c in sanitized if c.isalnum() or c in ('_', '-'))
+        
+        # If sanitization resulted in empty string, return 'unknown'
+        if not sanitized:
+            return 'unknown'
+        
+        return sanitized
+    
     def organize_file(
         self,
         source_path: Path,
@@ -62,11 +83,23 @@ class FileOrganizer:
     ) -> Path:
         """
         Move and rename file to organized folder structure.
-        Creates monthly folders: processed/YYYY-MM/filename.pdf
+        Creates hierarchical folders: processed/YYYY/MMM/vendor/filename.pdf
+        
+        Example: receipts/processed/2026/Feb/walmart/receipt_2026-02-15.pdf
         """
-        # Create month folder
-        month_folder = self.processed_folder / date.strftime('%Y-%m')
-        month_folder.mkdir(parents=True, exist_ok=True)
+        # Create year folder
+        year_folder = self.processed_folder / date.strftime('%Y')
+        
+        # Create month folder (3-letter abbreviation)
+        month_name = date.strftime('%b')  # Jan, Feb, Mar, etc.
+        month_folder = year_folder / month_name
+        
+        # Create vendor folder
+        vendor_folder_name = self._sanitize_vendor_name(merchant_name)
+        vendor_folder = month_folder / vendor_folder_name
+        
+        # Create all folders in hierarchy
+        vendor_folder.mkdir(parents=True, exist_ok=True)
         
         # Generate new filename
         new_filename = self.generate_filename(
@@ -74,7 +107,7 @@ class FileOrganizer:
         )
         
         # Destination path
-        dest_path = month_folder / new_filename
+        dest_path = vendor_folder / new_filename
         
         # Handle duplicate filenames
         if dest_path.exists():
@@ -82,7 +115,7 @@ class FileOrganizer:
             ext = dest_path.suffix
             counter = 1
             while dest_path.exists():
-                dest_path = month_folder / f"{base}_{counter}{ext}"
+                dest_path = vendor_folder / f"{base}_{counter}{ext}"
                 counter += 1
         
         # Move file
@@ -97,4 +130,3 @@ class FileOrganizer:
         except ValueError:
             return full_path.name
 
-# Made with Bob

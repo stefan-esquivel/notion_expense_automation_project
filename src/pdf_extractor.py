@@ -91,19 +91,32 @@ class PDFExtractor:
     
     def extract_date(self, text: str) -> Optional[datetime]:
         """Extract date from receipt text."""
-        # Look for date patterns
+        # Look for date patterns - prioritize YYYY-MM-DD format
         date_patterns = [
-            r'(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})',
-            r'((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4})',
-            r'(\d{4}[/-]\d{1,2}[/-]\d{1,2})',
+            # YYYY-MM-DD or YYYY/MM/DD (ISO format - most unambiguous)
+            # Use word boundaries to avoid matching partial dates
+            # dayfirst=False is critical for YYYY-MM-DD format
+            (r'\b(\d{4}[/-]\d{1,2}[/-]\d{1,2})\b', False, True),
+            # Month name formats (e.g., Mar 04, 2026 or March 4, 2026)
+            (r'((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4})', False, True),
+            # MM-DD-YYYY or DD-MM-YYYY (ambiguous - try yearfirst=True)
+            # Only match if NOT preceded by a 4-digit year
+            (r'(?<!\d)(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b', False, True),
         ]
         
-        for pattern in date_patterns:
+        for pattern, dayfirst, yearfirst in date_patterns:
             matches = re.finditer(pattern, text, re.IGNORECASE)
             for match in matches:
                 try:
                     date_str = match.group(1)
-                    parsed_date = date_parser.parse(date_str, fuzzy=True)
+                    # Use yearfirst=True to prefer YYYY-MM-DD interpretation
+                    parsed_date = date_parser.parse(date_str, dayfirst=dayfirst, yearfirst=yearfirst, fuzzy=True)
+                    
+                    # Sanity check: reject dates too far in the past or future
+                    current_year = datetime.now().year
+                    if parsed_date.year < 2000 or parsed_date.year > current_year + 10:
+                        continue
+                    
                     return parsed_date
                 except (ValueError, TypeError):
                     continue
@@ -171,4 +184,3 @@ class PDFExtractor:
             'pdf_filename': pdf_path.name
         }
 
-# Made with Bob

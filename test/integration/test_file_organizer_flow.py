@@ -41,5 +41,3 @@ class TestFileOrganizerFlow:
         """Test that proper logging occurs throughout the flow"""
         # TODO: Test logging integration
         pass
-
-# Made with Bob

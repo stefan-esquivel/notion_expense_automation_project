@@ -8,7 +8,7 @@ from pathlib import Path
 import httpx
 from notion_client import Client
 from notion_client.errors import APIResponseError
-from config import Config
+from src.config import Config
 
 NOTION_VERSION = "2025-09-03"
 
@@ -182,10 +182,17 @@ class NotionExpenseClient:
                     ]
                 }
         
+        # Get emoji for the merchant
+        emoji = Config.get_merchant_emoji(merchant_description)
+        
         try:
             response = self.client.pages.create(
                 parent={"database_id": self.expense_db_id},
-                properties=properties
+                properties=properties,
+                icon={
+                    "type": "emoji",
+                    "emoji": emoji
+                }
             )
             return response["id"]
         except APIResponseError as e:
@@ -225,10 +232,17 @@ class NotionExpenseClient:
             }
         }
         
+        # Get emoji for the person
+        emoji = Config.get_person_emoji(person)
+        
         try:
             response = self.client.pages.create(
                 parent={"database_id": self.split_db_id},
-                properties=properties
+                properties=properties,
+                icon={
+                    "type": "emoji",
+                    "emoji": emoji
+                }
             )
             split_page_id = response["id"]
             
@@ -336,3 +350,4 @@ class NotionExpenseClient:
         except APIResponseError as e:
             print(f"Notion API connection test failed: {e}")
             return False
+

@@ -33,6 +33,124 @@ class Config:
     # Notion relation property names
     EXPENSE_RELATION_PROPERTY = "Split Details Table"   # relation property name on Expense Table pages
     BALANCES_RELATION_PROPERTY = "Split Details Table"  # relation property name on Balances page
+
+    # Emoji Mappings for Merchants
+    MERCHANT_EMOJIS = {
+        # Shopping
+        'amazon': '🛒',
+        'walmart': '🛒',
+        'costco': '🛒',
+        'target': '🛒',
+        'bestbuy': '🛒',
+        'best buy': '🛒',
+        
+        # Food & Restaurants
+        'mcdonalds': '🍔',
+        'mcdonald': '🍔',
+        'burger': '🍔',
+        'pizza': '🍕',
+        'restaurant': '🍽️',
+        'starbucks': '☕',
+        'coffee': '☕',
+        'tim hortons': '☕',
+        'subway': '🥪',
+        
+        # Groceries
+        'longo': '🛒',
+        'longos': '🛒',
+        'grocery': '🛒',
+        'supermarket': '🛒',
+        
+        # Gas Stations
+        'shell': '⛽',
+        'esso': '⛽',
+        'petro': '⛽',
+        'gas': '⛽',
+        'fuel': '⛽',
+        
+        # Healthcare
+        'pharmacy': '🏥',
+        'shoppers': '🏥',
+        'rexall': '🏥',
+        'medical': '🏥',
+        'doctor': '🏥',
+        'hospital': '🏥',
+        
+        # Entertainment
+        'netflix': '🎬',
+        'youtube': '🎬',
+        'yt': '🎬',
+        'movie': '🎬',
+        'cinema': '🎬',
+        'spotify': '🎵',
+        'music': '🎵',
+        
+        # Utilities & Bills
+        'electrical': '⚡',
+        'electric': '⚡',
+        'hydro': '⚡',
+        'internet': '🌐',
+        'phone': '📱',
+        'tv': '📺',
+        
+        # Housing
+        'rent': '🏠',
+        'parking': '🅿️',
+        
+        # Office & Business
+        'staples': '💼',
+        'office': '💼',
+        'business': '💼',
+    }
+    
+    # Emoji Mappings for Split Persons (configurable)
+    PERSON_EMOJIS = {
+        'boyfriend': '👦',
+        'girlfriend': '👩🏾',
+        'partner': '💑',
+        'me': '👤',
+        'group': '👥',
+    }
+    
+    @classmethod
+    def get_merchant_emoji(cls, merchant_name: str) -> str:
+        """Get emoji for a merchant based on name matching.
+        
+        Args:
+            merchant_name: The merchant/description name
+            
+        Returns:
+            Emoji string, defaults to 💳 if no match found
+        """
+        merchant_lower = merchant_name.lower()
+        
+        # Check for exact or partial matches
+        for keyword, emoji in cls.MERCHANT_EMOJIS.items():
+            if keyword in merchant_lower:
+                return emoji
+        
+        # Default emoji for unknown merchants
+        return '💳'
+    
+    @classmethod
+    def get_person_emoji(cls, person_name: str) -> str:
+        """Get emoji for a person based on name or relationship.
+        
+        Args:
+            person_name: The person's name
+            
+        Returns:
+            Emoji string, defaults to 👤 if no match found
+        """
+        person_lower = person_name.lower()
+        
+        # Check for matches in person emoji mapping
+        for keyword, emoji in cls.PERSON_EMOJIS.items():
+            if keyword in person_lower:
+                return emoji
+        
+        # Default emoji for unknown persons
+        return '👤'
     
     @classmethod
     def validate(cls):
@@ -58,4 +176,3 @@ class Config:
         
         return True
 
-# Made with Bob

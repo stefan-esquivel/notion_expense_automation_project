@@ -40,11 +40,188 @@ def notion_client():
                                     'Bob': 'user-id-bob'
                                 }
                                 yield client
+from pathlib import Path
+
+from src.notion_api import NotionExpenseClient
+from src.config import Config
+
+
+@pytest.mark.unit
+class TestEmojiMappings:
+    """Test emoji mapping functionality"""
+    
+    def test_get_merchant_emoji_amazon(self):
+        """Test emoji for Amazon merchant"""
+        emoji = Config.get_merchant_emoji("Amazon Order")
+        assert emoji == '🛒'
+    
+    def test_get_merchant_emoji_walmart(self):
+        """Test emoji for Walmart merchant"""
+        emoji = Config.get_merchant_emoji("Walmart Groceries")
+        assert emoji == '🛒'
+    
+    def test_get_merchant_emoji_restaurant(self):
+        """Test emoji for restaurant"""
+        emoji = Config.get_merchant_emoji("McDonald's")
+        assert emoji == '🍔'
+    
+    def test_get_merchant_emoji_coffee(self):
+        """Test emoji for coffee shop"""
+        emoji = Config.get_merchant_emoji("Starbucks")
+        assert emoji == '☕'
+    
+    def test_get_merchant_emoji_gas(self):
+        """Test emoji for gas station"""
+        emoji = Config.get_merchant_emoji("Shell Gas Station")
+        assert emoji == '⛽'
+    
+    def test_get_merchant_emoji_pharmacy(self):
+        """Test emoji for pharmacy"""
+        emoji = Config.get_merchant_emoji("Shoppers Drug Mart")
+        assert emoji == '🏥'
+    
+    def test_get_merchant_emoji_entertainment(self):
+        """Test emoji for entertainment"""
+        emoji = Config.get_merchant_emoji("Netflix Subscription")
+        assert emoji == '🎬'
+    
+    def test_get_merchant_emoji_utilities(self):
+        """Test emoji for utilities"""
+        emoji = Config.get_merchant_emoji("Electrical Bill")
+        assert emoji == '⚡'
+    
+    def test_get_merchant_emoji_rent(self):
+        """Test emoji for rent"""
+        emoji = Config.get_merchant_emoji("Monthly Rent")
+        assert emoji == '🏠'
+    
+    def test_get_merchant_emoji_parking(self):
+        """Test emoji for parking"""
+        emoji = Config.get_merchant_emoji("Parking Fee")
+        assert emoji == '🅿️'
+    
+    def test_get_merchant_emoji_unknown(self):
+        """Test default emoji for unknown merchant"""
+        emoji = Config.get_merchant_emoji("Unknown Store XYZ")
+        assert emoji == '💳'
+    
+    def test_get_merchant_emoji_case_insensitive(self):
+        """Test that merchant matching is case insensitive"""
+        emoji1 = Config.get_merchant_emoji("AMAZON")
+        emoji2 = Config.get_merchant_emoji("amazon")
+        emoji3 = Config.get_merchant_emoji("Amazon")
+        assert emoji1 == emoji2 == emoji3 == '🛒'
+    
+    def test_get_person_emoji_boyfriend(self):
+        """Test emoji for boyfriend"""
+        emoji = Config.get_person_emoji("boyfriend")
+        assert emoji == '👦'
+    
+    def test_get_person_emoji_girlfriend(self):
+        """Test emoji for girlfriend"""
+        emoji = Config.get_person_emoji("girlfriend")
+        assert emoji == '👧'
+    
+    def test_get_person_emoji_partner(self):
+        """Test emoji for partner"""
+        emoji = Config.get_person_emoji("partner")
+        assert emoji == '💑'
+    
+    def test_get_person_emoji_me(self):
+        """Test emoji for me"""
+        emoji = Config.get_person_emoji("me")
+        assert emoji == '👤'
+    
+    def test_get_person_emoji_unknown(self):
+        """Test default emoji for unknown person"""
+        emoji = Config.get_person_emoji("John Doe")
+        assert emoji == '👤'
+    
+    def test_get_person_emoji_case_insensitive(self):
+        """Test that person matching is case insensitive"""
+        emoji1 = Config.get_person_emoji("BOYFRIEND")
+        emoji2 = Config.get_person_emoji("boyfriend")
+        emoji3 = Config.get_person_emoji("Boyfriend")
+        assert emoji1 == emoji2 == emoji3 == '👦'
 
 
 @pytest.mark.unit
 class TestNotionExpenseClient:
     """Test Notion API interaction logic"""
+    
+    @patch('src.notion_api.Client')
+    def test_create_expense_entry_includes_emoji(self, mock_client):
+        """Test that expense entry includes emoji icon"""
+        # Setup mock
+        mock_instance = Mock()
+        mock_client.return_value = mock_instance
+        mock_instance.pages.create.return_value = {"id": "test-page-id"}
+        
+        # Create client
+        client = NotionExpenseClient(
+            api_token="test-token",
+            expense_db_id="test-expense-db",
+            split_db_id="test-split-db",
+            balance_page_id="test-balance-page"
+        )
+        
+        # Create expense entry
+        page_id = client.create_expense_entry(
+            merchant_description="Amazon Order",
+            date=datetime(2026, 3, 10),
+            amount=50.00,
+            paid_by=Config.YOUR_NAME
+        )
+        
+        # Verify the call included emoji
+        call_args = mock_instance.pages.create.call_args
+        assert call_args is not None
+        assert 'icon' in call_args.kwargs
+        assert call_args.kwargs['icon']['type'] == 'emoji'
+        assert call_args.kwargs['icon']['emoji'] == '🛒'
+        assert page_id == "test-page-id"
+    
+    @patch('src.notion_api.Client')
+    def test_create_split_entry_includes_emoji(self, mock_client):
+        """Test that split entry includes emoji icon"""
+        # Setup mock
+        mock_instance = Mock()
+        mock_client.return_value = mock_instance
+        mock_instance.pages.create.return_value = {"id": "test-split-id"}
+        mock_instance.pages.retrieve.return_value = {
+            "properties": {
+                Config.EXPENSE_RELATION_PROPERTY: {"relation": []},
+                Config.BALANCES_RELATION_PROPERTY: {"relation": []}
+            }
+        }
+        mock_instance.pages.update.return_value = {}
+        
+        # Create client
+        client = NotionExpenseClient(
+            api_token="test-token",
+            expense_db_id="test-expense-db",
+            split_db_id="test-split-db",
+            balance_page_id="test-balance-page"
+        )
+        
+        # Create split entry
+        split_id = client.create_split_entry(
+            title="Test Split",
+            person=Config.PARTNER_NAME,
+            share_percent=50.0,
+            expense_page_id="test-expense-id"
+        )
+        
+        # Verify the call included emoji
+        call_args = mock_instance.pages.create.call_args
+        assert call_args is not None
+        assert 'icon' in call_args.kwargs
+        assert call_args.kwargs['icon']['type'] == 'emoji'
+        # The emoji depends on PARTNER_NAME, which defaults to 'Partner'
+        # 'Partner' contains 'partner' which maps to '💑'
+        expected_emoji = Config.get_person_emoji(Config.PARTNER_NAME)
+        assert call_args.kwargs['icon']['emoji'] == expected_emoji
+        assert split_id == "test-split-id"
     
     def test_init(self):
         """Test NotionExpenseClient initialization"""

@@ -251,5 +251,42 @@ class TestConfig:
         from src.config import Config
         
         assert 0 <= Config.DEFAULT_SPLIT_PERCENTAGE <= 100
+    
+    def test_config_has_emoji_mappings(self):
+        """Test that Config has emoji mapping dictionaries"""
+        from src.config import Config
+        
+        assert hasattr(Config, 'MERCHANT_EMOJIS')
+        assert hasattr(Config, 'PERSON_EMOJIS')
+        assert isinstance(Config.MERCHANT_EMOJIS, dict)
+        assert isinstance(Config.PERSON_EMOJIS, dict)
+    
+    def test_config_has_emoji_methods(self):
+        """Test that Config has emoji getter methods"""
+        from src.config import Config
+        
+        assert hasattr(Config, 'get_merchant_emoji')
+        assert hasattr(Config, 'get_person_emoji')
+        assert callable(Config.get_merchant_emoji)
+        assert callable(Config.get_person_emoji)
+    
+    def test_merchant_emoji_mappings_not_empty(self):
+        """Test that merchant emoji mappings are not empty"""
+        from src.config import Config
+        
+        assert len(Config.MERCHANT_EMOJIS) > 0
+        # Verify some key merchants are present
+        assert 'amazon' in Config.MERCHANT_EMOJIS
+        assert 'walmart' in Config.MERCHANT_EMOJIS
+        assert 'netflix' in Config.MERCHANT_EMOJIS
+    
+    def test_person_emoji_mappings_not_empty(self):
+        """Test that person emoji mappings are not empty"""
+        from src.config import Config
+        
+        assert len(Config.PERSON_EMOJIS) > 0
+        # Verify some key person types are present
+        assert 'boyfriend' in Config.PERSON_EMOJIS
+        assert 'girlfriend' in Config.PERSON_EMOJIS
+        assert 'partner' in Config.PERSON_EMOJIS
 
-# Made with Bob

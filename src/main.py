@@ -128,12 +128,12 @@ class ExpenseAutomation:
             # Step 8: Create Notion entries
             self.logger.info("Creating Notion entries")
             expense_page_id = self.notion_client.create_expense_entry(
-                expense_data['description'],
-                expense_data['date'],
-                expense_data['amount'],
-                expense_data['paid_by'],
-                pdf_path,  # Pass the file path for upload
-                expense_data['receipt_filename']
+                merchant_description=expense_data['description'],
+                date=expense_data['date'],
+                amount=expense_data['amount'],
+                paid_by=expense_data['paid_by'],
+                receipt_file_path=pdf_path,  # Pass the file path for upload
+                receipt_filename=expense_data['receipt_filename']
             )
             
             if split_data:

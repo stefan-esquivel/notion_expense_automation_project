@@ -14,10 +14,9 @@ console = Console()
 class ExpenseUI:
     """Handle all user interface interactions."""
     
-    def __init__(self, your_name: str, partner_name: str, notion_client=None):
+    def __init__(self, your_name: str, partner_name: str):
         self.your_name = your_name
         self.partner_name = partner_name
-        self.notion_client = notion_client
     
     def display_welcome(self):
         """Display welcome message."""
@@ -169,14 +168,7 @@ class ExpenseUI:
         expense_table.add_row("Merchant/Description", expense_data['description'])
         expense_table.add_row("Date", expense_data['date'].strftime('%B %d, %Y'))
         expense_table.add_row("Amount", f"CA${expense_data['amount']:.2f}")
-        
-        # Resolve person name from user ID if notion_client is available
-        paid_by_display = expense_data['paid_by']
-        if self.notion_client and 'paid_by_user_id' in expense_data:
-            paid_by_display = self.notion_client.get_username_from_id(expense_data['paid_by_user_id'])
-        
-        expense_table.add_row("Paid By", paid_by_display)
-
+        expense_table.add_row("Paid By", expense_data['paid_by'])
         expense_table.add_row("Receipt", expense_data.get('receipt_filename', 'N/A'))
         
         console.print(expense_table)
@@ -189,13 +181,7 @@ class ExpenseUI:
             split_table.add_column("Value", style="yellow")
             
             split_table.add_row("Title", split_data['title'])
-            
-            # Resolve person name from user ID if notion_client is available
-            person_display = split_data['person']
-            if self.notion_client and 'person_user_id' in split_data:
-                person_display = self.notion_client.get_username_from_id(split_data['person_user_id'])
-            
-            split_table.add_row("Person (Owes)", person_display)
+            split_table.add_row("Person (Owes)", split_data['person'])
             split_table.add_row("Date", split_data['date'].strftime('%B %d, %Y'))
             split_table.add_row("Share Percentage", f"%{split_data['share_percentage']:.2f}")
             
@@ -223,3 +209,4 @@ class ExpenseUI:
         """Display processing message."""
         console.print(f"\n[cyan]🔄 Processing receipt: {filename}[/cyan]\n")
 
+# Made with Bob

@@ -5,8 +5,6 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional
 
-import notion_client
-
 from config import Config
 from pdf_extractor import PDFExtractor
 from file_organizer import FileOrganizer
@@ -36,6 +34,7 @@ class ExpenseAutomation:
     def __init__(self):
         self.logger = setup_logging()
         self.config = Config
+        self.ui = ExpenseUI(Config.YOUR_NAME, Config.PARTNER_NAME)
         self.pdf_extractor = PDFExtractor()
         self.file_organizer = FileOrganizer(Config.PROCESSED_FOLDER)
         self.notion_client = NotionExpenseClient(
@@ -43,11 +42,6 @@ class ExpenseAutomation:
             Config.EXPENSE_TABLE_DATABASE_ID,
             split_db_id=Config.SPLIT_DETAILS_DATABASE_ID,
             balance_page_id=Config.BALANCES_PAGE_ID
-        )
-        self.ui = ExpenseUI(
-            Config.YOUR_NAME,
-            Config.PARTNER_NAME,
-            notion_client=self.notion_client
         )
     
     def process_receipt(self, pdf_path: Path) -> bool:
@@ -73,16 +67,12 @@ class ExpenseAutomation:
             
             # Step 3: Select who paid
             paid_by = self.ui.select_payer()
-
-            paid_by_user_id = self.notion_client.user_id_map[paid_by]
             
             # Determine who didn't pay (for split entry)
             other_person = (
                 self.config.PARTNER_NAME if paid_by == self.config.YOUR_NAME
                 else self.config.YOUR_NAME
             )
-
-            other_person_user_id = self.notion_client.user_id_map[other_person]
             
             # Step 4: Confirm split details
             use_split, split_percentage = self.ui.confirm_split(
@@ -96,7 +86,6 @@ class ExpenseAutomation:
                 'date': receipt_info['date'],
                 'amount': receipt_info['amount'],
                 'paid_by': paid_by,
-                'paid_by_user_id': paid_by_user_id,
                 'receipt_filename': pdf_path.name
             }
             
@@ -112,7 +101,6 @@ class ExpenseAutomation:
                 split_data = {
                     'title': split_title,
                     'person': other_person,
-                    "person_user_id": other_person_user_id,
                     'date': receipt_info['date'],
                     'share_percentage': split_percentage
                 }
@@ -224,3 +212,4 @@ def main():
 if __name__ == "__main__":
     main()
 
+# Made with Bob

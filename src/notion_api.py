@@ -35,23 +35,6 @@ class NotionExpenseClient:
             raise ValueError(f"No user ID found for person: {person_name}")
         return user_id
     
-    def get_username_from_id(self, user_id: str) -> str:
-        """
-        Get person name from Notion user ID by making an API call.
-        Falls back to user_id if the API call fails.
-        """
-        try:
-            # Use the Notion client to retrieve user information
-            user = self.client.users.retrieve(user_id=user_id)
-            return user.get("name", user_id)
-        except Exception as e:
-            print(f"Warning: Failed to fetch username for user ID {user_id}: {e}")
-            # Fallback to checking local map
-            for name, uid in self.user_id_map.items():
-                if uid == user_id:
-                    return name
-            return user_id  # Final fallback to user_id if not found
-    
     def _upload_file_to_notion(self, file_path: Path, new_filename: str) -> Optional[str]:
         """
         Upload a local file to Notion using the official File Upload API (single-part).
@@ -336,3 +319,5 @@ class NotionExpenseClient:
         except APIResponseError as e:
             print(f"Notion API connection test failed: {e}")
             return False
+
+# Made with Bob

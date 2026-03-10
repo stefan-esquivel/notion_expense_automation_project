@@ -89,8 +89,11 @@ SPLIT_DETAILS_DATABASE_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 BALANCES_PAGE_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 # Use aliases — these don't have to be real names
+# Emojis will appear as icons on Notion entries
 YOUR_NAME=You
+YOUR_EMOJI=👤
 PARTNER_NAME=Partner
+PARTNER_EMOJI=👤
 
 INPUT_FOLDER=receipts/input
 PROCESSED_FOLDER=receipts/processed

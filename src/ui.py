@@ -6,6 +6,7 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.prompt import Prompt, Confirm
 import inquirer
+from config import Config
 
 
 console = Console()
@@ -161,11 +162,15 @@ class ExpenseUI:
         console.print("[bold cyan]   Final Preview - Ready to Send to Notion[/bold cyan]")
         console.print("[bold cyan]═══════════════════════════════════════════════════════[/bold cyan]\n")
         
+        # Get emoji for expense entry
+        merchant_emoji = Config.get_merchant_emoji(expense_data['description'])
+        
         # Expense entry
         expense_table = Table(title="📊 Expense Table Entry", show_header=True)
         expense_table.add_column("Field", style="cyan")
         expense_table.add_column("Value", style="green")
         
+        expense_table.add_row("Icon", merchant_emoji)
         expense_table.add_row("Merchant/Description", expense_data['description'])
         expense_table.add_row("Date", expense_data['date'].strftime('%B %d, %Y'))
         expense_table.add_row("Amount", f"CA${expense_data['amount']:.2f}")
@@ -184,17 +189,20 @@ class ExpenseUI:
         
         # Split entry (if applicable)
         if split_data:
-            split_table = Table(title="💸 Split Details Entry", show_header=True)
-            split_table.add_column("Field", style="cyan")
-            split_table.add_column("Value", style="yellow")
-            
-            split_table.add_row("Title", split_data['title'])
-            
             # Resolve person name from user ID if notion_client is available
             person_display = split_data['person']
             if self.notion_client and 'person_user_id' in split_data:
                 person_display = self.notion_client.get_username_from_id(split_data['person_user_id'])
             
+            # Get emoji for split entry
+            person_emoji = Config.get_person_emoji(split_data['person'])
+            
+            split_table = Table(title="💸 Split Details Entry", show_header=True)
+            split_table.add_column("Field", style="cyan")
+            split_table.add_column("Value", style="yellow")
+            
+            split_table.add_row("Icon", person_emoji)
+            split_table.add_row("Title", split_data['title'])
             split_table.add_row("Person (Owes)", person_display)
             split_table.add_row("Date", split_data['date'].strftime('%B %d, %Y'))
             split_table.add_row("Share Percentage", f"%{split_data['share_percentage']:.2f}")

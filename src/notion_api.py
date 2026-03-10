@@ -8,7 +8,7 @@ from pathlib import Path
 import httpx
 from notion_client import Client
 from notion_client.errors import APIResponseError
-from src.config import Config
+from config import Config
 
 NOTION_VERSION = "2025-09-03"
 
@@ -233,7 +233,7 @@ class NotionExpenseClient:
         }
         
         # Get emoji for the person
-        emoji = Config.get_person_emoji(person)
+        emoji = Config.get_person_emoji(person_name=person)
         
         try:
             response = self.client.pages.create(

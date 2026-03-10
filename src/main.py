@@ -128,7 +128,7 @@ class ExpenseAutomation:
             # Step 8: Create Notion entries
             self.logger.info("Creating Notion entries")
             expense_page_id = self.notion_client.create_expense_entry(
-                expense_data['description'],
+                merchant_description=expense_data['description'],
                 expense_data['date'],
                 expense_data['amount'],
                 expense_data['paid_by'],

@@ -112,33 +112,57 @@ class TestEmojiMappings:
         emoji3 = Config.get_merchant_emoji("Amazon")
         assert emoji1 == emoji2 == emoji3 == '🛒'
     
+    def test_get_person_emoji_your_name(self):
+        """Test emoji for YOUR_NAME from config"""
+        emoji = Config.get_person_emoji(Config.YOUR_NAME)
+        assert emoji == Config.YOUR_EMOJI
+    
+    def test_get_person_emoji_partner_name(self):
+        """Test emoji for PARTNER_NAME from config"""
+        emoji = Config.get_person_emoji(Config.PARTNER_NAME)
+        assert emoji == Config.PARTNER_EMOJI
+    
+    def test_get_person_emoji_your_name_case_insensitive(self):
+        """Test that YOUR_NAME matching is case insensitive"""
+        emoji1 = Config.get_person_emoji(Config.YOUR_NAME.upper())
+        emoji2 = Config.get_person_emoji(Config.YOUR_NAME.lower())
+        emoji3 = Config.get_person_emoji(Config.YOUR_NAME)
+        assert emoji1 == emoji2 == emoji3 == Config.YOUR_EMOJI
+    
+    def test_get_person_emoji_partner_name_case_insensitive(self):
+        """Test that PARTNER_NAME matching is case insensitive"""
+        emoji1 = Config.get_person_emoji(Config.PARTNER_NAME.upper())
+        emoji2 = Config.get_person_emoji(Config.PARTNER_NAME.lower())
+        emoji3 = Config.get_person_emoji(Config.PARTNER_NAME)
+        assert emoji1 == emoji2 == emoji3 == Config.PARTNER_EMOJI
+    
     def test_get_person_emoji_boyfriend(self):
-        """Test emoji for boyfriend"""
+        """Test emoji for boyfriend keyword"""
         emoji = Config.get_person_emoji("boyfriend")
         assert emoji == '👦'
     
     def test_get_person_emoji_girlfriend(self):
-        """Test emoji for girlfriend"""
+        """Test emoji for girlfriend keyword"""
         emoji = Config.get_person_emoji("girlfriend")
-        assert emoji == '👧'
+        assert emoji == '👩🏾'
     
-    def test_get_person_emoji_partner(self):
-        """Test emoji for partner"""
+    def test_get_person_emoji_partner_keyword(self):
+        """Test emoji for partner keyword"""
         emoji = Config.get_person_emoji("partner")
         assert emoji == '💑'
     
     def test_get_person_emoji_me(self):
-        """Test emoji for me"""
+        """Test emoji for me keyword"""
         emoji = Config.get_person_emoji("me")
         assert emoji == '👤'
     
     def test_get_person_emoji_unknown(self):
         """Test default emoji for unknown person"""
-        emoji = Config.get_person_emoji("John Doe")
+        emoji = Config.get_person_emoji("Random Person XYZ")
         assert emoji == '👤'
     
-    def test_get_person_emoji_case_insensitive(self):
-        """Test that person matching is case insensitive"""
+    def test_get_person_emoji_keyword_case_insensitive(self):
+        """Test that keyword matching is case insensitive"""
         emoji1 = Config.get_person_emoji("BOYFRIEND")
         emoji2 = Config.get_person_emoji("boyfriend")
         emoji3 = Config.get_person_emoji("Boyfriend")

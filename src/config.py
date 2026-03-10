@@ -18,6 +18,8 @@ class Config:
     # User Configuration
     YOUR_NAME = os.getenv('YOUR_NAME', 'You')
     PARTNER_NAME = os.getenv('PARTNER_NAME', 'Partner')
+    YOUR_EMOJI = os.getenv('YOUR_EMOJI', '👤')
+    PARTNER_EMOJI = os.getenv('PARTNER_EMOJI', '👤')
     YOUR_USER_ID = os.getenv('YOUR_USER_ID', 'a20139cd-f446-493b-936f-05cf7f715835')
     PARTNER_USER_ID = os.getenv('PARTNER_USER_ID', 'a9e310cd-1c5b-4cea-8bad-7381b60d7144')
     
@@ -136,15 +138,26 @@ class Config:
     def get_person_emoji(cls, person_name: str) -> str:
         """Get emoji for a person based on name or relationship.
         
+        Priority order:
+        1. Check if person_name matches YOUR_NAME -> return YOUR_EMOJI
+        2. Check if person_name matches PARTNER_NAME -> return PARTNER_EMOJI
+        3. Check PERSON_EMOJIS dictionary for keyword matches
+        4. Return default emoji 👤
+        
         Args:
             person_name: The person's name
             
         Returns:
             Emoji string, defaults to 👤 if no match found
         """
-        person_lower = person_name.lower()
+        # Check for exact or case-insensitive match with configured names
+        if person_name.lower() == cls.YOUR_NAME.lower():
+            return cls.YOUR_EMOJI
+        if person_name.lower() == cls.PARTNER_NAME.lower():
+            return cls.PARTNER_EMOJI
         
-        # Check for matches in person emoji mapping
+        # Check for matches in person emoji mapping (for generic keywords)
+        person_lower = person_name.lower()
         for keyword, emoji in cls.PERSON_EMOJIS.items():
             if keyword in person_lower:
                 return emoji

@@ -35,6 +35,8 @@ class TestConfig:
         # Check user configuration attributes exist
         assert hasattr(Config, 'YOUR_NAME')
         assert hasattr(Config, 'PARTNER_NAME')
+        assert hasattr(Config, 'YOUR_EMOJI')
+        assert hasattr(Config, 'PARTNER_EMOJI')
         assert hasattr(Config, 'YOUR_USER_ID')
         assert hasattr(Config, 'PARTNER_USER_ID')
         
@@ -234,6 +236,8 @@ class TestConfig:
         # These should always be strings (have defaults)
         assert isinstance(Config.YOUR_NAME, str)
         assert isinstance(Config.PARTNER_NAME, str)
+        assert isinstance(Config.YOUR_EMOJI, str)
+        assert isinstance(Config.PARTNER_EMOJI, str)
         assert isinstance(Config.YOUR_USER_ID, str)
         assert isinstance(Config.PARTNER_USER_ID, str)
         assert isinstance(Config.EXPENSE_RELATION_PROPERTY, str)
@@ -288,5 +292,28 @@ class TestConfig:
         # Verify some key person types are present
         assert 'boyfriend' in Config.PERSON_EMOJIS
         assert 'girlfriend' in Config.PERSON_EMOJIS
+    
+    def test_user_emoji_configuration(self):
+        """Test that user emoji configuration is properly loaded"""
+        from src.config import Config
+        
+        # Verify emoji attributes exist and are strings
+        assert isinstance(Config.YOUR_EMOJI, str)
+        assert isinstance(Config.PARTNER_EMOJI, str)
+        
+        # Verify they have default values if not set in env
+        assert len(Config.YOUR_EMOJI) > 0
+        assert len(Config.PARTNER_EMOJI) > 0
+    
+    def test_get_person_emoji_prioritizes_configured_names(self):
+        """Test that get_person_emoji prioritizes YOUR_NAME and PARTNER_NAME"""
+        from src.config import Config
+        
+        # Test that configured names return configured emojis
+        your_emoji = Config.get_person_emoji(Config.YOUR_NAME)
+        partner_emoji = Config.get_person_emoji(Config.PARTNER_NAME)
+        
+        assert your_emoji == Config.YOUR_EMOJI
+        assert partner_emoji == Config.PARTNER_EMOJI
         assert 'partner' in Config.PERSON_EMOJIS
 

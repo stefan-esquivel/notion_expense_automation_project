@@ -198,7 +198,7 @@ class ExpenseAutomation:
             # Process each receipt
             success_count = 0
             for pdf_file in pdf_files:
-                if self.process_receipt(pdf_file):
+                if self.process_receipt(pdf_path=pdf_file):
                     success_count += 1
             
             # Summary

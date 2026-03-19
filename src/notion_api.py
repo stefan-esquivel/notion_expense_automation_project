@@ -229,6 +229,11 @@ class NotionExpenseClient:
             },
             "Share Percent": {
                 "number": share_percent / 100
+            },
+            "Balances": {
+                "relation": [
+                    {"id": self.balance_page_id}
+                ]
             }
         }
         
@@ -248,9 +253,6 @@ class NotionExpenseClient:
             
             # Link the split entry to the expense entry (critical: orphaned split is a data integrity issue)
             self._link_pages(source_page_id=expense_page_id, target_page_id=split_page_id, table_name=Config.EXPENSE_RELATION_PROPERTY, critical=True)
-
-            # Link the split entry to the balance entry (non-critical: warn only)
-            self._link_pages(source_page_id=self.balance_page_id, target_page_id=split_page_id, table_name=Config.BALANCES_RELATION_PROPERTY, critical=False)
             
             return split_page_id
         except APIResponseError as e:

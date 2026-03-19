@@ -34,7 +34,7 @@ class Config:
     
     # Notion relation property names
     EXPENSE_RELATION_PROPERTY = "Split Details Table"   # relation property name on Expense Table pages
-    BALANCES_RELATION_PROPERTY = "Split Details Table"  # relation property name on Balances page
+    SPLIT_RELATION_PROPERTY = "Expense Table"
 
     # Emoji Mappings for Merchants
     MERCHANT_EMOJIS = {

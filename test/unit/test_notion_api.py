@@ -26,20 +26,19 @@ def notion_client():
                 with patch('src.config.Config.YOUR_USER_ID', 'user-id-alice'):
                     with patch('src.config.Config.PARTNER_USER_ID', 'user-id-bob'):
                         with patch('src.config.Config.EXPENSE_RELATION_PROPERTY', 'Split Details Table'):
-                            with patch('src.config.Config.BALANCES_RELATION_PROPERTY', 'Split Details Table'):
-                                client = NotionExpenseClient(
-                                    api_token="test_token",
-                                    expense_db_id="expense_db_id",
-                                    split_db_id="split_db_id",
-                                    balance_page_id="balance_page_id"
-                                )
-                                client.client = mock_client.return_value
-                                # Manually set the user_id_map since Config is patched
-                                client.user_id_map = {
-                                    'Alice': 'user-id-alice',
-                                    'Bob': 'user-id-bob'
-                                }
-                                yield client
+                            client = NotionExpenseClient(
+                                api_token="test_token",
+                                expense_db_id="expense_db_id",
+                                split_db_id="split_db_id",
+                                balance_page_id="balance_page_id"
+                            )
+                            client.client = mock_client.return_value
+                            # Manually set the user_id_map since Config is patched
+                            client.user_id_map = {
+                                'Alice': 'user-id-alice',
+                                'Bob': 'user-id-bob'
+                            }
+                            yield client
 from pathlib import Path
 
 from src.notion_api import NotionExpenseClient
@@ -214,8 +213,7 @@ class TestNotionExpenseClient:
         mock_instance.pages.create.return_value = {"id": "test-split-id"}
         mock_instance.pages.retrieve.return_value = {
             "properties": {
-                Config.EXPENSE_RELATION_PROPERTY: {"relation": []},
-                Config.BALANCES_RELATION_PROPERTY: {"relation": []}
+                Config.EXPENSE_RELATION_PROPERTY: {"relation": []}
             }
         }
         mock_instance.pages.update.return_value = {}
@@ -492,19 +490,17 @@ class TestNotionExpenseClient:
         assert properties["Person"]["people"][0]["id"] == "user-id-alice"
         assert properties["Share Percent"]["number"] == 0.5
         
-        # Verify linking was called
-        assert mock_link.call_count == 2
-        mock_link.assert_any_call(
+        # Verify balance relation is set directly in properties (not via _link_pages)
+        assert "Balances" in properties
+        assert properties["Balances"]["relation"][0]["id"] == "balance_page_id"
+        
+        # Verify _link_pages was called only once for the expense (not for balance)
+        assert mock_link.call_count == 1
+        mock_link.assert_called_once_with(
             source_page_id="expense-page-id",
             target_page_id="split-page-id",
             table_name="Split Details Table",
             critical=True
-        )
-        mock_link.assert_any_call(
-            source_page_id="balance_page_id",
-            target_page_id="split-page-id",
-            table_name="Split Details Table",
-            critical=False
         )
     
     def test_create_split_entry_api_error(self, notion_client):

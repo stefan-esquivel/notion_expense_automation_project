@@ -52,3 +52,4 @@ htmlcov/
 .bobignore
 
 /mutants
+/bugs

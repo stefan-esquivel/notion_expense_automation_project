@@ -1,10 +1,11 @@
-from typing import TypedDict, Optional, List
+from typing import TypedDict, Optional
 from datetime import datetime
 
-from src.domain.enums import Sources, WorkflowStatus, MerchantCategory
+from src.domain.enums import WorkflowStatus
 from src.domain.models.recipts import Receipt
 from src.domain.models.enrichment import EnrichedReceipt
 from src.domain.models.expense import ExpenseSummary
+from src.domain.models.workflow import WorkflowInput, ReviewData, WorkflowResults, ValidationResult
 
 
 class ReceiptWorkflowState(TypedDict):
@@ -14,15 +15,15 @@ class ReceiptWorkflowState(TypedDict):
     1. Extraction: Raw data from PDF → Receipt
     2. Enrichment: AI processing → EnrichedReceipt (includes summarization)
     3. Output: Notion-ready data → ExpenseSummary
+    
+    All structured data uses Pydantic BaseModel for type safety and validation.
     """
     
     # ===== STATUS TRACKING =====
     status: WorkflowStatus  # Current phase of the workflow
     
     # ===== INPUT =====
-    source: Sources  # 'local_folder' | 'gmail'
-    file_path: str
-    raw_text: str
+    workflow_input: Optional[WorkflowInput]  # Structured input data (source, file_path, raw_text)
     
     # ===== EXTRACTION (Raw Data) =====
     receipt: Optional[Receipt]  # Raw extracted data from PDF
@@ -32,18 +33,14 @@ class ReceiptWorkflowState(TypedDict):
     enriched_receipt: Optional[EnrichedReceipt]  # Normalized, categorized, summarized
     
     # ===== VALIDATION =====
-    validation_errors: List[str]
-    requires_review: bool
+    validation_result: Optional[ValidationResult]  # Structured validation results with errors, warnings, and confidence
     
     # ===== REVIEW =====
-    human_edits: Optional[dict]  # User corrections during review
-    review_approved: bool
+    review_data: Optional[ReviewData]  # Structured review data (paid_by, corrections, approval status, timestamp)
     
     # ===== OUTPUT (Notion-Ready) =====
     expense_summary: Optional[ExpenseSummary]  # Final data for Notion API
     
     # ===== RESULTS =====
-    notion_expense_id: Optional[str]
-    notion_split_ids: Optional[List[str]]
-    archive_path: Optional[str]
-    failure_reason: Optional[str]
+    results: Optional[WorkflowResults]  # Structured results including Notion IDs, archive path, and timing
+    failure_reason: Optional[str]  # Error message if workflow failed

@@ -4,10 +4,36 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Load environment variables
-load_dotenv()
+from pathlib import Path
+
+env = os.getenv('APP_ENV', '').lower()
+if env == 'qa':
+    env_file = Path('.env.qa')
+    if env_file.exists():
+        load_dotenv(env_file)
+        print("✓ Loaded QA environment")
+    else:
+        load_dotenv()
+        print("⚠ Warning: .env.qa not found, using default .env")
+elif env == 'prod':
+    env_file = Path('.env.prod')
+    if env_file.exists():
+        load_dotenv(env_file)
+        print("✓ Loaded PRODUCTION environment")
+    else:
+        load_dotenv()
+        print("⚠ Warning: .env.prod not found, using default .env")
+else:
+    load_dotenv()
+    print("✓ Loaded LOCAL environment")
+
+# After the if/elif/else block
+CURRENT_ENV = env if env in ['qa', 'prod'] else 'local'
 
 class Config:
     """Application configuration."""
+    # Environment tracking
+    ENVIRONMENT = CURRENT_ENV
     
     # Notion API
     NOTION_API_TOKEN = os.getenv('NOTION_API_TOKEN')
@@ -20,8 +46,8 @@ class Config:
     PARTNER_NAME = os.getenv('PARTNER_NAME', 'Partner')
     YOUR_EMOJI = os.getenv('YOUR_EMOJI', '👤')
     PARTNER_EMOJI = os.getenv('PARTNER_EMOJI', '👤')
-    YOUR_USER_ID = os.getenv('YOUR_USER_ID', 'a20139cd-f446-493b-936f-05cf7f715835')
-    PARTNER_USER_ID = os.getenv('PARTNER_USER_ID', 'a9e310cd-1c5b-4cea-8bad-7381b60d7144')
+    YOUR_USER_ID = os.getenv('YOUR_USER_ID')
+    PARTNER_USER_ID = os.getenv('PARTNER_USER_ID')
     
     # File Paths
     PROJECT_ROOT = Path(__file__).parent.parent

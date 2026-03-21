@@ -53,3 +53,5 @@ htmlcov/
 
 /mutants
 /bugs
+.env.prod
+.env.qa

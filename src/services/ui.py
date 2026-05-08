@@ -107,6 +107,8 @@ class ExpenseUI:
             ),
         ]
         answers = inquirer.prompt(questions)
+        if answers is None:
+            raise KeyboardInterrupt("User cancelled selection")
         return answers['payer']
     
     def confirm_split(self, amount: float, split_percentage: float) -> tuple[bool, float]:
@@ -137,6 +139,9 @@ class ExpenseUI:
             ),
         ]
         answers = inquirer.prompt(questions)
+        
+        if answers is None:
+            raise KeyboardInterrupt("User cancelled selection")
         
         if answers['split_type'] == 'No split (100% individual expense)':
             return False, 0.0
@@ -204,7 +209,7 @@ class ExpenseUI:
             split_table.add_row("Icon", person_emoji)
             split_table.add_row("Title", split_data['title'])
             split_table.add_row("Person (Owes)", person_display)
-            split_table.add_row("Date", split_data['date'].strftime('%B %d, %Y'))
+            split_table.add_row("Date", expense_data['date'].strftime('%B %d, %Y'))
             split_table.add_row("Share Percentage", f"%{split_data['share_percentage']:.2f}")
             
             console.print(split_table)

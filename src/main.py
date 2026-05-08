@@ -1,6 +1,5 @@
 """Main application entry point."""
 import sys
-import logging
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
@@ -8,156 +7,59 @@ from typing import Optional
 import notion_client
 
 from config import Config
-from pdf_extractor import PDFExtractor
-from file_organizer import FileOrganizer
-from notion_api import NotionExpenseClient
-from ui import ExpenseUI
-
-
-# Set up logging
-def setup_logging():
-    """Configure logging to file and console."""
-    log_file = Config.LOG_FOLDER / f"expense_automation_{datetime.now().strftime('%Y%m%d')}.log"
-    
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler()
-        ]
-    )
-    return logging.getLogger(__name__)
+from services.pdf_extractor import PDFExtractor
+from services.file_organizer import FileOrganizer
+from services.notion_api import NotionExpenseClient
+from services.ui import ExpenseUI
+from logger import get_logger
+from workflows.langgraph.graph import build_graph, create_initial_state
+from domain.enums import WorkflowStatus
 
 
 class ExpenseAutomation:
     """Main application class orchestrating the expense automation workflow."""
     
     def __init__(self):
-        self.logger = setup_logging()
+        self.logger = get_logger(__name__)
         self.config = Config
-        self.pdf_extractor = PDFExtractor()
-        self.file_organizer = FileOrganizer(Config.PROCESSED_FOLDER)
-        self.notion_client = NotionExpenseClient(
-            Config.NOTION_API_TOKEN,
-            Config.EXPENSE_TABLE_DATABASE_ID,
-            split_db_id=Config.SPLIT_DETAILS_DATABASE_ID,
-            balance_page_id=Config.BALANCES_PAGE_ID
-        )
+        self.workflow = build_graph()
         self.ui = ExpenseUI(
             Config.YOUR_NAME,
             Config.PARTNER_NAME,
-            notion_client=self.notion_client
+            notion_client=None  # Will be initialized in workflow nodes
         )
     
     def process_receipt(self, pdf_path: Path) -> bool:
         """
-        Process a single receipt through the entire workflow.
+        Process a single receipt through the LangGraph workflow.
         Returns True if successful, False otherwise.
         """
         try:
             self.ui.display_processing(pdf_path.name)
             
-            # Step 1: Extract information from PDF
-            self.logger.info(f"Extracting information from {pdf_path.name}")
-            receipt_info = self.pdf_extractor.parse_receipt(pdf_path)
+            # Create initial workflow state
+            self.logger.info(f"Starting workflow for {pdf_path.name}")
+            initial_state = create_initial_state(str(pdf_path))
             
-            # Validate required fields
-            if not receipt_info.get('amount') or not receipt_info.get('date'):
-                self.ui.display_error("Could not extract amount or date from receipt")
-                self.logger.error(f"Missing required fields in {pdf_path.name}")
+            # Run the workflow
+            result = self.workflow.invoke(initial_state)
+            
+            # Check workflow status
+            if result['status'] == WorkflowStatus.COMPLETED:
+                if result.get('results'):
+                    results = result['results']
+                    self.ui.display_success(str(results.archive_path))
+                    self.logger.info(f"Successfully processed {pdf_path.name}")
+                    self.logger.info(f"Notion expense ID: {results.notion_expense_id}")
+                    return True
+                else:
+                    self.ui.display_error("Workflow completed but no results found")
+                    return False
+            else:
+                error_msg = result.get('failure_reason', 'Unknown error')
+                self.ui.display_error(f"Workflow failed: {error_msg}")
+                self.logger.error(f"Workflow failed for {pdf_path.name}: {error_msg}")
                 return False
-            
-            # Step 2: Review and edit information
-            receipt_info = self.ui.review_and_edit(receipt_info)
-            
-            # Step 3: Select who paid
-            paid_by = self.ui.select_payer()
-
-            paid_by_user_id = self.notion_client.user_id_map[paid_by]
-            
-            # Determine who didn't pay (for split entry)
-            other_person = (
-                self.config.PARTNER_NAME if paid_by == self.config.YOUR_NAME
-                else self.config.YOUR_NAME
-            )
-
-            other_person_user_id = self.notion_client.user_id_map[other_person]
-            
-            # Step 4: Confirm split details
-            use_split, split_percentage = self.ui.confirm_split(
-                receipt_info['amount'],
-                split_percentage=self.config.DEFAULT_SPLIT_PERCENTAGE
-            )
-            
-            # Step 5: Prepare data for Notion
-            expense_data = {
-                'description': receipt_info['description'],
-                'date': receipt_info['date'],
-                'amount': receipt_info['amount'],
-                'paid_by': paid_by,
-                'paid_by_user_id': paid_by_user_id,
-                'receipt_filename': pdf_path.name
-            }
-            
-            split_data = None
-            if use_split:
-                split_title = self.notion_client.generate_split_title(
-                    other_person,
-                    receipt_info['merchant_name'],
-                    receipt_info['description'],
-                    receipt_info['date']
-                )
-                
-                split_data = {
-                    'title': split_title,
-                    'person': other_person,
-                    "person_user_id": other_person_user_id,
-                    'date': receipt_info['date'],
-                    'share_percentage': split_percentage
-                }
-            
-            # Step 6: Display final preview
-            self.ui.display_final_preview(expense_data, split_data)
-            
-            # Step 7: Confirm before sending to Notion
-            if not self.ui.confirm_send_to_notion():
-                self.logger.info("User cancelled sending to Notion")
-                return False
-            
-            # Step 8: Create Notion entries
-            self.logger.info("Creating Notion entries")
-            expense_page_id = self.notion_client.create_expense_entry(
-                merchant_description=expense_data['description'],
-                date=expense_data['date'],
-                amount=expense_data['amount'],
-                paid_by=expense_data['paid_by'],
-                receipt_file_path=pdf_path,  # Pass the file path for upload
-                receipt_filename=expense_data['receipt_filename']
-            )
-            
-            if split_data:
-                self.notion_client.create_split_entry(
-                    split_data['title'],
-                    split_data['person'],
-                    split_data['share_percentage'],
-                    expense_page_id
-                )
-            
-            # Step 9: Organize file
-            self.logger.info("Organizing receipt file")
-            organized_path = self.file_organizer.organize_file(
-                pdf_path,
-                receipt_info['date'],
-                receipt_info['merchant_name'],
-                receipt_info['description'],
-                receipt_info['amount']
-            )
-            
-            # Step 10: Success!
-            self.ui.display_success(str(organized_path))
-            self.logger.info(f"Successfully processed {pdf_path.name}")
-            return True
             
         except Exception as e:
             self.ui.display_error(str(e))
@@ -176,9 +78,15 @@ class ExpenseAutomation:
             self.logger.info("Validating configuration")
             Config.validate()
             
-            # Test Notion connection
+            # Test Notion connection (create temporary client for testing)
             self.logger.info("Testing Notion API connection")
-            if not self.notion_client.test_connection():
+            test_client = NotionExpenseClient(
+                Config.NOTION_API_TOKEN,
+                Config.EXPENSE_TABLE_DATABASE_ID,
+                split_db_id=Config.SPLIT_DETAILS_DATABASE_ID,
+                balance_page_id=Config.BALANCES_PAGE_ID
+            )
+            if not test_client.test_connection():
                 self.ui.display_error("Failed to connect to Notion API. Check your credentials.")
                 return
             

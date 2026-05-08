@@ -5,7 +5,7 @@ from typing import Optional, List
 from datetime import datetime
 from pathlib import Path
 
-from src.domain.enums import Sources
+from domain.enums import Sources
 
 
 class WorkflowInput(BaseModel):
@@ -93,15 +93,15 @@ class WorkflowResults(BaseModel):
     """
     
     notion_expense_id: str = Field(
-        description="Notion page ID for the created expense entry (32-character hex string)",
+        description="Notion page ID for the created expense entry (UUID format with or without hyphens)",
         min_length=32,
-        max_length=32,
-        examples=["27361377bcc3807b883be5176931dea4"]
+        max_length=36,
+        examples=["27361377bcc3807b883be5176931dea4", "35961377-bcc3-8172-a93b-ef826e153c5a"]
     )
     
     notion_split_ids: List[str] = Field(
         default_factory=list,
-        description="List of Notion page IDs for created split detail entries"
+        description="List of Notion page IDs for created split detail entries (UUID format)"
     )
     
     archive_path: Path = Field(

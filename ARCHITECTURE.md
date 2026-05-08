@@ -108,6 +108,258 @@ The Notion Expense Automation system is a Python-based application that automate
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+## LangGraph Workflow Architecture
+
+### Overview
+
+The system now uses **LangGraph** for orchestrating the receipt processing workflow. LangGraph provides a state machine-based approach with clear node transitions, error handling, and human-in-the-loop capabilities.
+
+### Workflow State Machine
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    LANGGRAPH WORKFLOW                            │
+│                                                                   │
+│  START                                                            │
+│    │                                                              │
+│    ▼                                                              │
+│  ┌──────────────┐                                                │
+│  │ INGEST NODE  │  Validates input, extracts raw text from PDF  │
+│  └──────┬───────┘                                                │
+│         │                                                         │
+│         ▼                                                         │
+│  ┌──────────────┐                                                │
+│  │ EXTRACT NODE │  Parses PDF data into structured Receipt      │
+│  └──────┬───────┘                                                │
+│         │                                                         │
+│         ▼                                                         │
+│  ┌──────────────┐                                                │
+│  │ ENRICH NODE  │  Uses LLM to categorize and enhance data      │
+│  └──────┬───────┘                                                │
+│         │                                                         │
+│         ▼                                                         │
+│  ┌──────────────┐                                                │
+│  │VALIDATE NODE │  Validates data quality and completeness      │
+│  └──────┬───────┘                                                │
+│         │                                                         │
+│         ▼                                                         │
+│  ┌──────────────┐                                                │
+│  │ REVIEW NODE  │  Human-in-the-loop: review and approve        │
+│  └──────┬───────┘                                                │
+│         │                                                         │
+│         ▼                                                         │
+│  ┌──────────────┐                                                │
+│  │ COMMIT NODE  │  Submits to Notion API and organizes file     │
+│  └──────┬───────┘                                                │
+│         │                                                         │
+│         ▼                                                         │
+│       END                                                         │
+│                                                                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Workflow Nodes
+
+#### 1. Ingest Node ([`ingest_node.py`](src/workflows/langgraph/nodes/ingest_node.py))
+**Purpose**: Entry point that validates input and extracts raw text
+
+**Responsibilities**:
+- Validates [`WorkflowInput`](src/domain/models/workflow.py:11) (file path, source)
+- Checks file existence
+- Extracts raw text from PDF using [`PDFExtractor`](src/services/pdf_extractor.py)
+- Updates state status to `INGESTING`
+
+**Input**: [`ReceiptWorkflowState`](src/workflows/langgraph/state.py:11) with `workflow_input`
+**Output**: State with `raw_text` populated
+**Error Handling**: Sets status to `FAILED` with `failure_reason`
+
+#### 2. Extract Node ([`extract_node.py`](src/workflows/langgraph/nodes/extract_node.py))
+**Purpose**: Parses PDF data into structured format
+
+**Responsibilities**:
+- Uses [`PDFExtractor.parse_receipt()`](src/services/pdf_extractor.py) with LLM enabled
+- Converts extracted data to [`Receipt`](src/domain/models/recipts.py:8) model
+- Extracts merchant, date, amount, items
+- Updates state status to `EXTRACTING`
+
+**Input**: State with `workflow_input.file_path`
+**Output**: State with [`receipt`](src/workflows/langgraph/state.py:29) populated
+**Error Handling**: Catches extraction errors, sets `FAILED` status
+
+#### 3. Enrich Node ([`enrich_node.py`](src/workflows/langgraph/nodes/enrich_node.py))
+**Purpose**: Uses LLM to categorize and enhance receipt data
+
+**Responsibilities**:
+- Calls [`llm_enrich_receipt()`](src/llm/receipt_extractor.py) to categorize merchant
+- Generates confidence scores
+- Adds contextual notes
+- Updates state status to `ENRICHING`
+
+**Input**: State with `receipt`
+**Output**: State with [`enriched_receipt`](src/workflows/langgraph/state.py:33) ([`EnrichedReceipt`](src/domain/models/enrichment.py))
+**Error Handling**: Catches LLM errors, sets `FAILED` status
+
+#### 4. Validate Node ([`validate_node.py`](src/workflows/langgraph/nodes/validate_node.py))
+**Purpose**: Validates data quality and completeness
+
+**Responsibilities**:
+- Checks required fields (merchant, date, amount)
+- Validates amount format (positive, reasonable)
+- Validates date format (ISO, not future)
+- Verifies total calculation vs items
+- Calculates confidence score
+- Updates state status to `VALIDATING`
+
+**Input**: State with `receipt` and optionally `enriched_receipt`
+**Output**: State with [`validation_result`](src/workflows/langgraph/state.py:36) ([`ValidationResult`](src/domain/models/workflow.py:124))
+**Validation Result Contains**:
+- `is_valid`: Boolean
+- `errors`: List of critical issues
+- `warnings`: List of non-critical issues
+- `requires_review`: Always `True` (prototyping mode)
+- `confidence_score`: 0.0-1.0
+
+#### 5. Review Node ([`review_node.py`](src/workflows/langgraph/nodes/review_node.py))
+**Purpose**: Human-in-the-loop for reviewing and correcting data
+
+**Responsibilities**:
+- Displays receipt data using [`ExpenseUI`](src/services/ui.py)
+- Allows user to edit amount, merchant, date
+- Prompts user to select who paid
+- Confirms split details (50/50, custom, or no split)
+- Generates split titles and receipt filename
+- Creates [`ExpenseSummary`](src/domain/models/expense.py:7) for Notion
+- Updates state status to `REVIEWING`
+
+**Input**: State with `receipt` and `validation_result`
+**Output**: State with [`review_data`](src/workflows/langgraph/state.py:39) and [`expense_summary`](src/workflows/langgraph/state.py:42)
+**User Interactions**:
+1. Review and edit extracted data
+2. Select payer (you or partner)
+3. Confirm split percentage
+4. Preview final data
+5. Confirm submission
+
+**Error Handling**: 
+- `KeyboardInterrupt` → User cancelled
+- `ValueError` → Validation error
+- Sets `FAILED` status with reason
+
+#### 6. Commit Node ([`commit_node.py`](src/workflows/langgraph/nodes/commit_node.py))
+**Purpose**: Submits data to Notion and organizes file
+
+**Responsibilities**:
+- Validates Notion configuration
+- Creates expense entry via [`NotionExpenseClient.create_expense_entry()`](src/services/notion_api.py)
+- Creates split entries via [`NotionExpenseClient.create_split_entry()`](src/services/notion_api.py)
+- Organizes file using [`FileOrganizer.organize_file()`](src/services/file_organizer.py)
+- Updates state status to `SUBMITTING` then `COMPLETED`
+
+**Input**: State with `expense_summary`
+**Output**: State with [`results`](src/workflows/langgraph/state.py:45) ([`WorkflowResults`](src/domain/models/workflow.py:88))
+**Results Contains**:
+- `notion_expense_id`: Created expense page ID
+- `notion_split_ids`: List of created split page IDs
+- `archive_path`: Where file was moved
+- `timestamp`: When workflow completed
+
+**Error Handling**: Catches Notion API errors, sets `FAILED` status
+
+### Workflow State ([`state.py`](src/workflows/langgraph/state.py))
+
+The [`ReceiptWorkflowState`](src/workflows/langgraph/state.py:11) TypedDict tracks data through the workflow:
+
+```python
+class ReceiptWorkflowState(TypedDict):
+    # Status tracking
+    status: WorkflowStatus  # PENDING, INGESTING, EXTRACTING, etc.
+    
+    # Input
+    workflow_input: Optional[WorkflowInput]  # Source and file path
+    
+    # Extraction phase
+    receipt: Optional[Receipt]  # Raw extracted data
+    
+    # Enrichment phase
+    enriched_receipt: Optional[EnrichedReceipt]  # AI-enhanced data
+    
+    # Validation phase
+    validation_result: Optional[ValidationResult]  # Quality checks
+    
+    # Review phase
+    review_data: Optional[ReviewData]  # User corrections
+    
+    # Output phase
+    expense_summary: Optional[ExpenseSummary]  # Notion-ready data
+    
+    # Results
+    results: Optional[WorkflowResults]  # Final outcomes
+    failure_reason: Optional[str]  # Error message if failed
+```
+
+### Data Models
+
+#### Input Models
+- [`WorkflowInput`](src/domain/models/workflow.py:11): Initial input (source, file_path, raw_text)
+- [`Sources`](src/domain/enums.py): Enum for input sources (LOCAL_FOLDER, GMAIL)
+
+#### Processing Models
+- [`Receipt`](src/domain/models/recipts.py:8): Raw extracted data (vendor, date, items, total)
+- [`ReceiptItem`](src/domain/models/grocery.py:5): Individual line item (name, price, category)
+- [`EnrichedReceipt`](src/domain/models/enrichment.py): AI-enhanced data (category, confidence, notes)
+
+#### Validation Models
+- [`ValidationResult`](src/domain/models/workflow.py:124): Validation outcome (is_valid, errors, warnings, confidence_score)
+
+#### Review Models
+- [`ReviewData`](src/domain/models/workflow.py:37): User corrections (paid_by, overrides, approval)
+
+#### Output Models
+- [`ExpenseSummary`](src/domain/models/expense.py:7): Final Notion-ready data
+- [`SplitDetail`](src/domain/models/expense.py:53): Split information (person, share_percent, title)
+- [`WorkflowResults`](src/domain/models/workflow.py:88): Final outcomes (Notion IDs, archive path)
+
+### Status Flow
+
+The [`WorkflowStatus`](src/domain/enums.py) enum tracks workflow progress:
+
+```
+PENDING → INGESTING → EXTRACTING → ENRICHING → VALIDATING → 
+REVIEWING → SUBMITTING → COMPLETED
+                                                    ↓
+                                                 FAILED
+```
+
+### Error Handling Strategy
+
+1. **Node-Level**: Each node catches exceptions and sets `FAILED` status
+2. **State Preservation**: Failed state includes `failure_reason` for debugging
+3. **Graceful Degradation**: Validation warnings don't block workflow
+4. **User Control**: Review node allows user to cancel or fix issues
+
+### Testing
+
+Comprehensive unit tests with **88% coverage**:
+- [`test_ingest_node.py`](test/unit/test_ingest_node.py): 8 tests
+- [`test_extract_node.py`](test/unit/test_extract_node.py): 13 tests  
+- [`test_validate_node.py`](test/unit/test_validate_node.py): 24 tests
+- [`test_enrich_node.py`](test/unit/test_enrich_node.py): 15 tests
+- [`test_review_node.py`](test/unit/test_review_node.py): 25 tests
+- [`test_commit_node.py`](test/unit/test_commit_node.py): 14 tests
+
+See [`TEST_COVERAGE_NODES.md`](test/unit/TEST_COVERAGE_NODES.md) for detailed coverage report.
+
+### Benefits of LangGraph Architecture
+
+1. **Clear Separation of Concerns**: Each node has a single responsibility
+2. **Testability**: Nodes are pure functions that can be tested in isolation
+3. **State Management**: Centralized state makes data flow explicit
+4. **Error Recovery**: Failed workflows can be inspected and potentially resumed
+5. **Extensibility**: New nodes can be added without modifying existing ones
+6. **Human-in-the-Loop**: Review node provides natural checkpoint for user input
+7. **Observability**: Status tracking provides clear visibility into workflow progress
+
+
 ## Component Details
 
 ### 1. Configuration Module (`src/config.py`)

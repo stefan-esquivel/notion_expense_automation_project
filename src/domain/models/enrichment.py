@@ -14,27 +14,27 @@ class EnrichedReceipt(BaseModel):
     """
     
     # Normalized merchant information
-    normalized_merchant: str = Field(
-        description="Standardized merchant name (e.g., 'Walmart' instead of 'WALMART SUPERCENTER #1234')"
-    )
+    # normalized_merchant: str = Field(
+    #     description="Standardized merchant name (e.g., 'Walmart' instead of 'WALMART SUPERCENTER #1234')"
+    # )
     merchant_category: str = Field(
         description="Category of merchant: 'grocery', 'utility', 'subscription', 'retail', etc."
     )
+
+    '''
+    I think we can wait on this for now
+    '''
     
-    # Parsed temporal data
-    parsed_date: datetime = Field(
-        description="Properly parsed datetime from receipt"
-    )
+    # Parsed temporal data 
+    # parsed_date: datetime = Field(
+    #     description="Properly parsed datetime from receipt"
+    # )
     
-    # AI-generated summaries (enrichment phase)
-    grocery_summary: Optional[str] = Field(
-        default=None,
-        description="Human-readable summary of grocery items (e.g., 'Shrimp, Vegetables, Dairy')"
-    )
-    recipe_candidate: Optional[str] = Field(
-        default=None,
-        description="Suggested recipe based on items (e.g., 'Pasta Dinner', 'Stir Fry')"
-    )
+    # # AI-generated summaries (enrichment phase)
+    # grocery_summary: Optional[str] = Field(
+    #     default=None,
+    #     description="Human-readable summary of grocery items (e.g., 'Shrimp, Vegetables, Dairy')"
+    # )
     
     # Confidence metrics
     confidence_score: float = Field(

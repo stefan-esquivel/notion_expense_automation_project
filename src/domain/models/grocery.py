@@ -2,11 +2,16 @@ from pydantic import BaseModel, Field
 from typing import Optional
 
 
-class GroceryItem(BaseModel):
-    """Individual grocery item from a receipt.
+class ReceiptItem(BaseModel):
+    """Individual item from a receipt.
     
-    Represents a single line item from a grocery receipt, including
+    Represents a single line item from a receipt, including
     the product name, price, and optional category classification.
+    
+    Design Note: This model intentionally does not include a quantity field.
+    Each item on a receipt is treated as a separate line item with its own price,
+    even if multiple units of the same product were purchased. This reflects how
+    most receipts display items and simplifies price calculations.
     """
     
     name: str = Field(
@@ -26,3 +31,7 @@ class GroceryItem(BaseModel):
         description="Product category for grouping (e.g., 'produce', 'dairy', 'meat', 'pantry')",
         examples=["produce", "dairy", "meat", "seafood", "bakery", "pantry"]
     )
+
+
+# Backwards compatibility alias
+GroceryItem = ReceiptItem

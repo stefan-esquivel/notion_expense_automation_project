@@ -1,11 +1,11 @@
 from typing import TypedDict, Optional
 from datetime import datetime
 
-from src.domain.enums import WorkflowStatus
-from src.domain.models.recipts import Receipt
-from src.domain.models.enrichment import EnrichedReceipt
-from src.domain.models.expense import ExpenseSummary
-from src.domain.models.workflow import WorkflowInput, ReviewData, WorkflowResults, ValidationResult
+from domain.enums import WorkflowStatus
+from domain.models.recipts import Receipt
+from domain.models.enrichment import EnrichedReceipt
+from domain.models.expense import ExpenseSummary
+from domain.models.workflow import WorkflowInput, ReviewData, WorkflowResults, ValidationResult
 
 
 class ReceiptWorkflowState(TypedDict):
@@ -23,7 +23,7 @@ class ReceiptWorkflowState(TypedDict):
     status: WorkflowStatus  # Current phase of the workflow
     
     # ===== INPUT =====
-    workflow_input: Optional[WorkflowInput]  # Structured input data (source, file_path, raw_text)
+    workflow_input: Optional[WorkflowInput]  # Structured input data (source, file_path)
     
     # ===== EXTRACTION (Raw Data) =====
     receipt: Optional[Receipt]  # Raw extracted data from PDF

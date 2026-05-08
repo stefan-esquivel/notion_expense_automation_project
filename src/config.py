@@ -41,6 +41,9 @@ class Config:
     SPLIT_DETAILS_DATABASE_ID = os.getenv('SPLIT_DETAILS_DATABASE_ID')
     BALANCES_PAGE_ID = os.getenv('BALANCES_PAGE_ID')
     
+    # OpenAI API
+    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+    
     # User Configuration
     YOUR_NAME = os.getenv('YOUR_NAME', 'You')
     PARTNER_NAME = os.getenv('PARTNER_NAME', 'Partner')

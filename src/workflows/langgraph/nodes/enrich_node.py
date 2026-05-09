@@ -1,6 +1,7 @@
 
 """Enrich node for LangGraph workflow."""
 
+from src.domain.models import recipts
 from workflows.langgraph.state import ReceiptWorkflowState
 from domain.enums import WorkflowStatus
 from llm.receipt_extractor import llm_enrich_receipt
@@ -32,6 +33,12 @@ def enrich_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
         receipt = state.get("receipt")
         if not receipt:
             raise ValueError("No receipt data found in state")
+
+        # Check if merchant is unknown
+
+        if receipt.vendor == "unknown":
+            logger.info("🤖 Skipping LLM enrichment for manual receipts")
+            return state
         
         # Enrich receipt using LLM
         logger.info(f"🤖 Enriching receipt: {receipt.vendor}")

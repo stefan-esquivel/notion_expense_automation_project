@@ -2,7 +2,7 @@
 from uuid import UUID
 from typing import List, Optional
 from pydantic import BaseModel, Field
-from domain.models.grocery import ReceiptItem
+from domain.models.receipt_item import ReceiptItem
 
 
 class Receipt(BaseModel):
@@ -26,6 +26,11 @@ class Receipt(BaseModel):
     
     vendor: str = Field(
         description="Raw vendor/merchant name as extracted from PDF (may be messy, e.g., 'WALMART SUPERCENTER #1234')",
+        min_length=1
+    )
+
+    transaction_type: str = Field(
+        description="Raw type of receipt expense (e.g., 'Bill', 'Order', 'Misc')",
         min_length=1
     )
     

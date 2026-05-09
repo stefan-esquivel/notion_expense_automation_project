@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any, List
 import pdfplumber
 from dateutil import parser as date_parser
 
-from domain.models.grocery import GroceryItem
+from domain.models.receipt_item import ReceiptItem
 from llm.client import ReceiptLLMClient
 from logger import get_logger
 
@@ -61,23 +61,21 @@ class PDFExtractor:
             if re.search(pattern, text_lower):
                 # Extract more specific merchant name
                 if merchant_type == 'walmart':
-                    return ('walmart', 'Walmart Order')
+                    return ('Order', 'Walmart')
                 elif merchant_type == 'amazon':
-                    return ('amazon', 'Amazon Order')
+                    return ('Order', 'Amazon')
                 elif merchant_type == 'electrical':
-                    return ('electrical', 'Electrical Bill')
+                    return ('Charge', 'Electrical Bill')
                 elif merchant_type == 'rent':
-                    return ('rent', 'Rent')
+                    return ('Charge', 'Rent')
                 elif merchant_type == 'netflix':
-                    return ('netflix', 'Netflix')
+                    return ('Bill', 'Netflix')
                 elif merchant_type == 'youtube':
-                    return ('youtube', 'Youtube Premium')
+                    return ('Bill', 'Youtube Premium')
                 elif merchant_type == 'parking':
                     return ('parking', 'Parking')
                 elif merchant_type == 'longo':
-                    return ('longo', "Longo's Groceries")
-                elif merchant_type == 'tv':
-                    return ('tv', 'TV Payment')
+                    return ('expense', "Longo's")
         
         return ('unknown', 'Unknown Merchant')
     
@@ -167,7 +165,7 @@ class PDFExtractor:
         
     #     return found_items
     
-    def extract_items(self, text: str) -> List[GroceryItem]:
+    def extract_items(self, text: str) -> List[ReceiptItem]:
         """
         Extract individual items from receipt text.
         
@@ -177,7 +175,7 @@ class PDFExtractor:
             text: Raw receipt text
             
         Returns:
-            List of GroceryItem objects
+            List of ReceiptItem objects
         """
         if not self.use_llm_for_items:
             return []
@@ -191,11 +189,11 @@ class PDFExtractor:
             result = self.llm_client.extract_items(text)
             items_data = result.get("items", [])
             
-            # Convert to GroceryItem objects
+            # Convert to ReceiptItem objects
             grocery_items = []
             for item_data in items_data:
                 try:
-                    grocery_item = GroceryItem(
+                    grocery_item = ReceiptItem(
                         name=item_data.get("name", "Unknown"),
                         price=float(item_data.get("price", 0.0)),
                         category=item_data.get("category")
@@ -218,7 +216,7 @@ class PDFExtractor:
         """
         text = self.extract_text(pdf_path)
         
-        merchant_type, merchant_name = self.detect_merchant(text)
+        transaction_type, merchant_name = self.detect_merchant(text)
         amount = self.extract_amount(text)
         date = self.extract_date(text)
         
@@ -229,7 +227,7 @@ class PDFExtractor:
         if items:
             item_names = [item.name for item in items[:3]]
             items_desc = ', '.join(item_names)
-            full_description = f"{merchant_name} ({items_desc})"
+            full_description = f"{merchant_name} {transaction_type} ({items_desc})"
         else:
             items_desc = ""
             full_description = merchant_name
@@ -247,8 +245,9 @@ class PDFExtractor:
         return {
             'order_id': None,
             'merchant_name': merchant_name,
+            'transaction_type': transaction_type,
             'summary': items_desc,
-            'items': items,  # Now returns List[GroceryItem] instead of list of strings
+            'items': items,  # Now returns List[ReceiptItem] instead of list of strings
             'amount': amount,
             'date': date,
             'raw_text': text[:500],  # First 500 chars for debugging

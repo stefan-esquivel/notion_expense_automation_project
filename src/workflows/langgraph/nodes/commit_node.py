@@ -18,6 +18,22 @@ def commit_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
     state["status"] = WorkflowStatus.SUBMITTING
 
     try:
+        # Check if QA_SKIP_COMMIT is enabled
+        if Config.QA_SKIP_COMMIT:
+            logger.info("⚠️  QA_SKIP_COMMIT enabled - Skipping Notion commit and file moving")
+            logger.info("✓ Workflow completed successfully (QA mode - no commit)")
+            
+            # Mark as completed without actually committing
+            # Use valid 32-character mock UUIDs for QA mode
+            state["status"] = WorkflowStatus.COMPLETED
+            state["results"] = WorkflowResults(
+                notion_expense_id="00000000000000000000000000000000",  # 32-char mock UUID
+                notion_split_ids=[],
+                archive_path=Path("qa-skipped"),
+                timestamp=datetime.now()
+            )
+            return state
+        
         # Validate required config values
         if not Config.NOTION_API_TOKEN:
             raise ValueError("NOTION_API_TOKEN is not configured")

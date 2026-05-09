@@ -35,6 +35,9 @@ class Config:
     # Environment tracking
     ENVIRONMENT = CURRENT_ENV
     
+    # QA Mode - Skip Notion commits and file moving for testing
+    QA_SKIP_COMMIT = os.getenv('QA_SKIP_COMMIT', 'false').lower() == 'true'
+    
     # Notion API
     NOTION_API_TOKEN = os.getenv('NOTION_API_TOKEN')
     EXPENSE_TABLE_DATABASE_ID = os.getenv('EXPENSE_TABLE_DATABASE_ID')

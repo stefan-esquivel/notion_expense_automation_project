@@ -15,27 +15,6 @@ from logger import get_logger
 logger = get_logger(__name__)
 
 
-def _extract_base_merchant_name(vendor: str) -> str:
-    """
-    Extract base merchant name from vendor string.
-    Examples:
-        "Amazon Order" -> "Amazon"
-        "Walmart Order" -> "Walmart"
-        "Electrical Bill" -> "Electrical"
-        "Netflix" -> "Netflix"
-    """
-    # Common suffixes to remove
-    suffixes = [' Order', ' Bill', ' Payment', ' Groceries', ' Premium']
-    
-    base_name = vendor
-    for suffix in suffixes:
-        if vendor.endswith(suffix):
-            base_name = vendor[:-len(suffix)]
-            break
-    
-    return base_name
-
-
 def review_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
     """
     Review node: Human-in-the-loop for reviewing and correcting receipt data.
@@ -72,16 +51,13 @@ def review_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
         workflow_input = state.get('workflow_input')
         pdf_filename = workflow_input.file_path if workflow_input else 'Unknown'
         
-        # Extract base merchant name (e.g., "Amazon" from "Amazon Order")
-        base_merchant_name = _extract_base_merchant_name(receipt.vendor)
-        
         # Combine vendor and summary into merchant description format: "Vendor (Summary)"
         merchant_description = receipt.vendor
         if receipt.summary:
-            merchant_description = f"{receipt.vendor} ({receipt.summary})"
+            merchant_description = f"{receipt.vendor} {receipt.transaction_type} ({receipt.summary})"
         
         receipt_info = {
-            'merchant_name': base_merchant_name,
+            'merchant_name': receipt.vendor,
             'description': merchant_description,
             'amount': receipt.total,
             'date': datetime.fromisoformat(receipt.date) if receipt.date else datetime.now(),
@@ -112,7 +88,7 @@ def review_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
             # Compare against the combined merchant_description format
             original_description = receipt.vendor
             if receipt.summary:
-                original_description = f"{receipt.vendor} ({receipt.summary})"
+                original_description = f"{receipt.vendor} {receipt.transaction_type} ({receipt.summary})"
             
             if updated_receipt_info['description'] != original_description:
                 merchant_override = updated_receipt_info['description']
@@ -220,7 +196,14 @@ def review_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
         ui.display_final_preview(expense_data, split_data)
         
         # Confirm before sending to Notion
-        ui.confirm_send_to_notion()
+        user_confirmed = ui.confirm_send_to_notion()
+        
+        if not user_confirmed:
+            # User declined to send to Notion
+            state["status"] = WorkflowStatus.FAILED
+            state["failure_reason"] = "User declined to send data to Notion"
+            logger.info(f"\n\n❌ User declined to send data to Notion")
+            return state
         
         # Store in state
         state["review_data"] = review_data

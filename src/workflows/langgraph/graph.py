@@ -22,7 +22,7 @@ def missing_information(state: ReceiptWorkflowState) -> bool:
     """
     missing_info = []
 
-    if state.scan_results and state.scan_result.has_missing_data():
+    if state.scan_results and state.scan_results.has_missing_data():
         return True
     else:
         return False

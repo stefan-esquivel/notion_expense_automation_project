@@ -119,7 +119,16 @@ class WorkflowResults(BaseModel):
         default_factory=datetime.now,
         description="Timestamp when the workflow completed"
     )
+class ScanResults(BaseModel):
+    """ Results form the scan phase.
 
+    Captures Missing recipt info for the user to add
+
+    """
+
+    is_mid
+
+    
 
 class ValidationResult(BaseModel):
     """Results from the validation phase.

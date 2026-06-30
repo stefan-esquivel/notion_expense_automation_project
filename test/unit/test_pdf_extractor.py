@@ -134,6 +134,34 @@ class TestPDFExtractor:
         amount = extractor.extract_amount(text)
         
         assert amount is None
+
+    def test_extract_amount_walmart_with_temporary_hold(self, extractor):
+        """Bug #33: Walmart receipts with a 'Temporary hold' must return the real total."""
+        text = (
+            "Subtotal $62.38\n"
+            "Taxes $3.03\n"
+            "Total $65.41\n"
+            "Temporary hold $68.29\n"
+            "Temporary hold\n"
+            "$68.29\n"
+        )
+        amount = extractor.extract_amount(text)
+
+        assert amount == 65.41, f"Expected 65.41 (real total) but got {amount}"
+
+    def test_extract_amount_hold_higher_than_total_still_returns_total(self, extractor):
+        """Bug #33: Temporary hold value higher than total must not win."""
+        text = "Total $100.00\nTemporary hold $110.00"
+        amount = extractor.extract_amount(text)
+
+        assert amount == 100.00
+
+    def test_extract_amount_no_hold_still_works(self, extractor):
+        """Regression: normal receipts without a hold still extract correctly."""
+        text = "Subtotal $72.68\nTaxes $4.32\nTotal $80.59"
+        amount = extractor.extract_amount(text)
+
+        assert amount == 80.59
     
     def test_detect_merchant_walmart(self, extractor):
         """Test Walmart merchant detection"""

@@ -100,6 +100,18 @@ pip install -r requirements.txt
 
 Wait for all packages to install. This may take a few minutes.
 
+### 2.5 Set Up Secret/PII Scanning Hooks
+
+This repo scans staged commits and pushes for leaked secrets/keys and PII in receipt PDFs. One-time setup per clone:
+
+```bash
+brew install gitleaks
+pip install pre-commit
+pre-commit install --hook-type pre-commit --hook-type pre-push
+```
+
+This installs a `pre-commit` hook (fast, staged-changes-only secret scan + PDF PII scan) and a `pre-push` hook (full-history secret scan + PDF PII scan) as a backstop. See `.pre-commit-config.yaml`, `.gitleaks.toml`, and `scripts/check_pdf_pii.py`.
+
 ## Step 3: Configuration
 
 ### 3.1 Create Your .env File

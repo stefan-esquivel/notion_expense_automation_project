@@ -1,0 +1,26 @@
+repos:
+  - repo: local
+    hooks:
+      - id: gitleaks-staged
+        name: gitleaks (staged secrets scan)
+        description: Scan staged changes for secrets/keys before they enter a commit.
+        entry: gitleaks protect --staged --redact --verbose --config .gitleaks.toml
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: gitleaks-history
+        name: gitleaks (full history secrets scan)
+        description: Scan full git history for secrets/keys before pushing.
+        entry: gitleaks detect --redact --verbose --config .gitleaks.toml
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: pdf-pii-scan
+        name: PDF PII scan
+        description: Heuristic scan of tracked/staged PDFs for emails, phone numbers, addresses, SSNs/SINs, and credit card numbers.
+        entry: venv/bin/python scripts/check_pdf_pii.py
+        language: system
+        pass_filenames: false
+        stages: [pre-commit, pre-push]

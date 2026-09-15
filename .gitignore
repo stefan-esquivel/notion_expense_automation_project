@@ -39,6 +39,7 @@ logs/*.log
 # Receipts (keep structure but not actual files)
 receipts/input/*.pdf
 receipts/processed/**/*.pdf
+receipts/test_input/*.pdf
 
 # OS
 .DS_Store

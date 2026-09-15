@@ -22,6 +22,7 @@ class WorkflowStatus(Enum):
     INGESTING = "ingesting"      # Ingest data from PDF
     EXTRACTING = "extracting"    # Extracting data from PDF
     SCANNING = "scanning"        # Scanning Missing data form PDF
+    AUGMENTING = "augmenting"    # Auto-filling missing data found by scan
     ENRICHING = "enriching"      # AI processing and summarization
     VALIDATING = "validating"    # Checking data quality
     REVIEWING = "reviewing"      # Waiting for human review

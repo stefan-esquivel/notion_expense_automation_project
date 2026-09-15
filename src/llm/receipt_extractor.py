@@ -36,6 +36,7 @@ def llm_extract_receipt(raw_text: str, client: Optional[ReceiptLLMClient] = None
     receipt = Receipt(
         recipt_id=str(uuid4()),  # Convert UUID to string
         vendor=extracted.get("merchant_name", "Unknown"),
+        transaction_type=extracted.get("transaction_type", "Order"),
         date=extracted.get("date", ""),
         items=extracted.get("items", []),
         total=float(extracted.get("total_amount", 0.0))

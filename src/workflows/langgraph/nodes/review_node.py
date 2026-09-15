@@ -14,6 +14,21 @@ from logger import get_logger
 
 logger = get_logger(__name__)
 
+_MERCHANT_NAME_SUFFIXES = ("Order", "Bill", "Payment", "Premium", "Groceries", "Charge")
+
+
+def _extract_base_merchant_name(name: str) -> str:
+    """Strip a trailing transaction-type/plan word from a merchant name.
+
+    Given a combined string like "Amazon Order" or "YouTube Premium" (a
+    vendor name immediately followed by its transaction type), returns just
+    the base merchant name ("Amazon", "YouTube").
+    """
+    parts = name.strip().split()
+    if len(parts) > 1 and parts[-1] in _MERCHANT_NAME_SUFFIXES:
+        return " ".join(parts[:-1])
+    return name.strip()
+
 
 def review_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
     """
@@ -64,6 +79,21 @@ def review_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
             'pdf_filename': pdf_filename
         }
         
+        # Surface what augment auto-filled and what's still missing, so the
+        # user can overwrite/complete it in the edit step that follows.
+        augment_results = state.get("augment_results")
+        if augment_results and (augment_results.filled_fields or augment_results.still_missing):
+            field_values = {
+                'vendor': receipt.vendor,
+                'date': receipt.date,
+                'total': receipt.total
+            }
+            ui.display_scan_augment_summary(
+                filled_fields=augment_results.filled_fields,
+                still_missing=augment_results.still_missing,
+                field_values=field_values
+            )
+
         # Use UI to review and edit
         updated_receipt_info = ui.review_and_edit(receipt_info)
         

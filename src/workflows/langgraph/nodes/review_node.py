@@ -160,7 +160,14 @@ def review_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
             # Format: YYYY-MM-DD_Merchant_Description_$Amount.pdf
             date_str = final_date.strftime('%Y-%m-%d')
             merchant_clean = final_merchant_description.replace(' ', '_').replace('/', '_')
-            receipt_filename = f"{date_str}_{merchant_clean}_${final_amount:.2f}.pdf"
+            amount_str = f"${final_amount:.2f}"
+            # Notion enforces a 100-char limit on file names; truncate the middle segment if needed.
+            # Fixed overhead: "YYYY-MM-DD_" (11) + "_$X.XX.pdf" (suffix length)
+            suffix = f"_{amount_str}.pdf"
+            max_merchant_len = 100 - len(date_str) - 1 - len(suffix)  # 1 for the "_" after date
+            if len(merchant_clean) > max_merchant_len:
+                merchant_clean = merchant_clean[:max_merchant_len]
+            receipt_filename = f"{date_str}_{merchant_clean}{suffix}"
         
         # Create splits list if split is enabled
         splits = None

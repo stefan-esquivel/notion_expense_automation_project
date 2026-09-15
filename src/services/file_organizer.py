@@ -38,8 +38,16 @@ class FileOrganizer:
         date_str = date.strftime('%Y-%m-%d')
         
         if clean_desc:
-            filename = f"{date_str}_{clean_merchant}_{clean_desc}_{amount_str}.pdf"
+            # Notion enforces a 100-char limit on file names; truncate the middle segments if needed.
+            middle = f"{clean_merchant}_{clean_desc}"
+            max_middle_len = 100 - len(date_str) - 1 - 1 - len(amount_str) - len(".pdf")  # two "_" separators
+            if len(middle) > max_middle_len:
+                middle = middle[:max_middle_len]
+            filename = f"{date_str}_{middle}_{amount_str}.pdf"
         else:
+            max_merchant_len = 100 - len(date_str) - 1 - 1 - len(amount_str) - len(".pdf")  # one "_" each side
+            if len(clean_merchant) > max_merchant_len:
+                clean_merchant = clean_merchant[:max_merchant_len]
             filename = f"{date_str}_{clean_merchant}_{amount_str}.pdf"
         
         return filename

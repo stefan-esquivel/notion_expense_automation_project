@@ -93,8 +93,9 @@ class PDFExtractor:
         """
         # --- Pass 1: labelled total on a non-hold line ---
         # Use \b so that 'Subtotal' does NOT match — only a standalone 'Total' / 'Grand Total' / 'Amount' word.
+        # Currency prefix handles: "$", "CA$", "CAD", or bare number.
         labelled_pattern = re.compile(
-            r'\b(?:grand total|total|amount)\b[\s:]*(?:CA)?\$?\s*(\d+[,\d]*\.?\d{2})',
+            r'\b(?:grand total|total|amount)\b[\s:]*(?:CA\$|CAD|CA)?\s*\$?\s*(\d+[,\d]*\.?\d{2})',
             re.IGNORECASE,
         )
         for line in text.splitlines():
@@ -110,7 +111,7 @@ class PDFExtractor:
 
         # --- Pass 2: fallback — collect all amounts and return the largest ---
         fallback_patterns = [
-            r'(?:total|amount|grand total)[\s:]*(?:CA)?\$?\s*(\d+[,\d]*\.?\d{2})',
+            r'(?:total|amount|grand total)[\s:]*(?:CA\$|CAD|CA)?\s*\$?\s*(\d+[,\d]*\.?\d{2})',
             r'(?:CA)?\$\s*(\d+[,\d]*\.\d{2})',
             r'(\d+[,\d]*\.\d{2})\s*(?:CAD|CA\$)',
         ]

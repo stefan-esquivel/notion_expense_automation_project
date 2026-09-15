@@ -61,6 +61,12 @@ class ExpenseAutomation:
                 self.logger.error(f"Workflow failed for {pdf_path.name}: {error_msg}")
                 return False
             
+        except ValueError as e:
+            # Known, recoverable issues (e.g. image-based PDF, missing text).
+            # Log as a warning — no traceback needed.
+            self.ui.display_error(str(e))
+            self.logger.warning(f"Skipping {pdf_path.name}: {e}")
+            return False
         except Exception as e:
             self.ui.display_error(str(e))
             self.logger.error(f"Error processing {pdf_path.name}: {e}", exc_info=True)

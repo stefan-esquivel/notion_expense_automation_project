@@ -49,6 +49,13 @@ def create_initial_state(pdf_path: str, source: Sources = Sources.LOCAL_FOLDER) 
     extractor = PDFExtractor()
     raw_text = extractor.extract_text(Path(pdf_path))
     
+    if not raw_text or not raw_text.strip():
+        raise ValueError(
+            f"No text could be extracted from '{Path(pdf_path).name}'. "
+            "The PDF appears to be image-based (scanned). "
+            "OCR support is not yet available — please convert it to a text-based PDF first."
+        )
+    
     # Create workflow input
     workflow_input = WorkflowInput(
         source=source,

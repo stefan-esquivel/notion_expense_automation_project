@@ -5,7 +5,7 @@ from domain.enums import WorkflowStatus
 from domain.models.recipts import Receipt
 from domain.models.enrichment import EnrichedReceipt
 from domain.models.expense import ExpenseSummary
-from domain.models.workflow import ScanResults, WorkflowInput, ReviewData, WorkflowResults, ValidationResult
+from domain.models.workflow import ScanResults, AugmentResults, WorkflowInput, ReviewData, WorkflowResults, ValidationResult
 
 
 class ReceiptWorkflowState(TypedDict):
@@ -30,7 +30,10 @@ class ReceiptWorkflowState(TypedDict):
 
     # ===== Scan =====
     scan_results: Optional[ScanResults]
-    
+
+    # ===== Augment =====
+    augment_results: Optional[AugmentResults]  # Structured results of augment's auto-fill attempt
+
     # ===== ENRICHMENT (Processed Data) =====
     # This is where summarization happens!
     enriched_receipt: Optional[EnrichedReceipt]  # Normalized, categorized, summarized

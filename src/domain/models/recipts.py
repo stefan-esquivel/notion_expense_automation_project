@@ -48,3 +48,25 @@ class Receipt(BaseModel):
         gt=0,
         examples=[92.01, 49.60, 150.00]
     )
+
+
+REQUIRED_RECEIPT_FIELDS: List[str] = ["vendor", "date", "total"]
+
+
+def get_missing_required_fields(receipt: "Receipt") -> List[str]:
+    """Return the names of required Receipt fields that are missing or empty.
+
+    Single source of truth for "field presence" shared by scan_node
+    (pre-enrichment gate) and validate_node (post-enrichment safety net),
+    so the two phases never disagree about what "required" means.
+    """
+    missing: List[str] = []
+
+    if not receipt.vendor or receipt.vendor.strip() == "":
+        missing.append("vendor")
+    if not receipt.date or receipt.date.strip() == "":
+        missing.append("date")
+    if receipt.total is None:
+        missing.append("total")
+
+    return missing

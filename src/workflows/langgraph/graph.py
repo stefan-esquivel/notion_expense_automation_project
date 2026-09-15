@@ -7,6 +7,8 @@ from domain.models.workflow import WorkflowInput
 from services.pdf_extractor import PDFExtractor
 from workflows.langgraph.nodes.ingest_node import ingest_node
 from workflows.langgraph.nodes.extract_node import extract_node
+from workflows.langgraph.nodes.scan_node import scan_node
+from workflows.langgraph.nodes.augment_node import augment_node
 from workflows.langgraph.nodes.enrich_node import enrich_node
 from workflows.langgraph.nodes.review_node import review_node
 from workflows.langgraph.nodes.validate_node import validate_node
@@ -16,18 +18,16 @@ from workflows.langgraph.state import ReceiptWorkflowState
 def missing_information(state: ReceiptWorkflowState) -> bool:
     """
     Check if any required information is missing from the receipt.
+
     Args:
-        state: The current state of the receipt workflow.    Returns:
+        state: The current state of the receipt workflow.
+
+    Returns:
         A boolean indicating whether any required information is missing.
     """
-    missing_info = []
+    scan_results = state.get("scan_results")
+    return bool(scan_results and scan_results.has_missing_data)
 
-    if state.scan_results and state.scan_results.has_missing_data():
-        return True
-    else:
-        return False
-    
-    
 
 def build_graph():
 
@@ -49,8 +49,10 @@ def build_graph():
     graph.add_edge("extract", "scan")
 
     graph.add_conditional_edges(
-        "scan", 
+        "scan",
         missing_information, {True:"augment", False : "enrich"})
+
+    graph.add_edge("augment", "enrich")
 
     graph.add_edge("enrich", "validate")
 
@@ -83,6 +85,8 @@ def create_initial_state(pdf_path: str, source: Sources = Sources.LOCAL_FOLDER) 
         "status": WorkflowStatus.PENDING,
         "workflow_input": workflow_input,
         "receipt": None,
+        "scan_results": None,
+        "augment_results": None,
         "enriched_receipt": None,
         "validation_result": None,
         "review_data": None,

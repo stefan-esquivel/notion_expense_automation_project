@@ -32,6 +32,7 @@ class TestEnrichNode:
         return Receipt(
             recipt_id='ORD-12345',
             vendor='Walmart',
+            transaction_type='Order',
             summary='Groceries',
             date='2026-05-08',
             items=[

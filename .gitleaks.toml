@@ -1,0 +1,10 @@
+title = "gitleaks config for notion_expense_automation_project"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known-safe files: detect-secrets stores hashed (not real) secrets here"
+paths = [
+  '''\.secrets\.baseline$''',
+]

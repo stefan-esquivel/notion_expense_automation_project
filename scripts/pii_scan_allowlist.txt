@@ -1,0 +1,12 @@
+# Reviewed findings from scripts/check_pdf_pii.py, accepted as false positives
+# or intentionally-synthetic data. Format: <repo-relative-path>:<sha256-of-file>
+# A file's hash changes if its content changes, so edits require re-review.
+
+# Synthetic Amazon fixture — "phone_number" is Amazon's own public support
+# line, "street_address" hits are Amazon's corporate address, no real PII.
+receipts/test_processed/2026/Mar/amazon_order/2026-03-07_Amazon_Order_Baking_Sheet_Set_$49.60.pdf:c6d5632278e4aaa95f55cb8a5299f2077af11f8cf0de6482dd5350704c3708d6
+test/fixtures/pdfs/2026-03-07_Amazon_Order_Baking_Sheets_$49.60.pdf:c6d5632278e4aaa95f55cb8a5299f2077af11f8cf0de6482dd5350704c3708d6
+
+# Synthetic Walmart fixture — "credit_card_number" hit is the masked
+# "0000...0000" placeholder digits, not a real card number.
+test/fixtures/pdfs/2026-03-04_Walmart_Order_Meatballs_$80.59.pdf:d59327ba8f03eddad652aa7ffebe706032bea829377c44175f0a2696051f9199

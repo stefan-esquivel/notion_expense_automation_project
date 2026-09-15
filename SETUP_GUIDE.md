@@ -100,6 +100,20 @@ pip install -r requirements.txt
 
 Wait for all packages to install. This may take a few minutes.
 
+### 2.5 Set Up Secret/PII Scanning Hooks
+
+This repo scans staged commits and pushes for leaked secrets/keys and PII in receipt PDFs. One-time setup per clone:
+
+```bash
+brew install gitleaks
+pip install pre-commit
+pre-commit install --hook-type pre-commit --hook-type pre-push
+```
+
+The pre-push stage also runs a deeper LLM-based PII review (`scripts/check_pdf_pii_claude.py`) via the [Claude Code CLI](https://claude.com/claude-code), using your existing `claude` login — no API key needed. If `claude` isn't installed, that one check fails; either install it or drop the `pdf-pii-scan-claude` hook from `.pre-commit-config.yaml` locally. It costs a few cents and a couple seconds per PDF pushed.
+
+This installs a `pre-commit` hook (fast, staged-changes-only secret scan + PDF PII scan) and a `pre-push` hook (full-history secret scan + PDF PII scan) as a backstop. See `.pre-commit-config.yaml`, `.gitleaks.toml`, and `scripts/check_pdf_pii.py`.
+
 ## Step 3: Configuration
 
 ### 3.1 Create Your .env File

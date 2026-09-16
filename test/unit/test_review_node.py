@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 from workflows.langgraph.nodes.review_node import review_node, _extract_base_merchant_name
 from workflows.langgraph.state import ReceiptWorkflowState
 from domain.enums import WorkflowStatus, Sources
-from domain.models.workflow import WorkflowInput, ValidationResult, AugmentResults
+from domain.models.workflow import WorkflowInput, ValidationResult, AugmentResults, ScanResults
 from domain.models.recipts import Receipt, ReceiptItem
 
 
@@ -77,8 +77,8 @@ class TestReviewNode:
             summary='Groceries',
             date='2026-05-08',
             items=[
-                ReceiptItem(name='Milk', price=4.99, quantity=1),
-                ReceiptItem(name='Bread', price=3.50, quantity=2)
+                ReceiptItem(name='Milk', price=4.99),
+                ReceiptItem(name='Bread', price=3.50)
             ],
             total=11.99
         )
@@ -94,14 +94,14 @@ class TestReviewNode:
                 raw_text="Sample text"
             ),
             receipt=valid_receipt,
+            scan_results=ScanResults(has_missing_data=False, missing_fields=[]),
+            augment_results=None,
             enriched_receipt=None,
             validation_result=ValidationResult(
-                is_valid=True,
-                errors=[],
-                warnings=[],
-                requires_review=True,
+                issues=[],
                 confidence_score=0.95
             ),
+            acknowledged_warnings=set(),
             review_data=None,
             expense_summary=None,
             results=None,
@@ -448,7 +448,10 @@ class TestReviewNode:
         assert result["expense_summary"].receipt_file_path == Path("/path/to/receipt.pdf")
 
     def test_review_node_displays_augment_summary_when_present(self, valid_state, mock_config, mock_ui):
-        """Test that augment's filled/missing fields are shown to the user."""
+        """Test that scan + augment narrative is shown with filled/missing detail."""
+        valid_state["scan_results"] = ScanResults(
+            has_missing_data=True, missing_fields=["date", "vendor"]
+        )
         valid_state["augment_results"] = AugmentResults(
             filled_fields={"date": "llm_extraction"},
             still_missing=["vendor"]
@@ -468,11 +471,13 @@ class TestReviewNode:
 
         mock_ui_instance.display_scan_augment_summary.assert_called_once()
         _, kwargs = mock_ui_instance.display_scan_augment_summary.call_args
+        assert kwargs["originally_missing"] == ["date", "vendor"]
         assert kwargs["filled_fields"] == {"date": "llm_extraction"}
         assert kwargs["still_missing"] == ["vendor"]
 
     def test_review_node_no_augment_summary_when_absent(self, valid_state, mock_config, mock_ui):
-        """Test the augment summary is not shown when there's nothing to report."""
+        """Test the scan summary is shown (clean) when no fields were missing."""
+        # valid_state already has scan_results with no missing fields — panel still shown
         assert valid_state.get("augment_results") is None
 
         mock_ui_instance = Mock()
@@ -487,10 +492,15 @@ class TestReviewNode:
 
         review_node(valid_state)
 
-        mock_ui_instance.display_scan_augment_summary.assert_not_called()
+        # Panel is always shown on first pass when scan_results is present
+        mock_ui_instance.display_scan_augment_summary.assert_called_once()
+        _, kwargs = mock_ui_instance.display_scan_augment_summary.call_args
+        assert kwargs["originally_missing"] == []
+        assert kwargs["filled_fields"] == {}
+        assert kwargs["still_missing"] == []
 
     def test_review_node_no_augment_summary_when_empty(self, valid_state, mock_config, mock_ui):
-        """Test an AugmentResults with nothing filled/missing doesn't trigger display."""
+        """Test empty AugmentResults with scan showing no missing: panel shows clean state."""
         valid_state["augment_results"] = AugmentResults(filled_fields={}, still_missing=[])
 
         mock_ui_instance = Mock()
@@ -505,4 +515,9 @@ class TestReviewNode:
 
         review_node(valid_state)
 
-        mock_ui_instance.display_scan_augment_summary.assert_not_called()
+        # Panel is shown on first pass (scan_results present), reporting clean state
+        mock_ui_instance.display_scan_augment_summary.assert_called_once()
+        _, kwargs = mock_ui_instance.display_scan_augment_summary.call_args
+        assert kwargs["originally_missing"] == []
+        assert kwargs["filled_fields"] == {}
+        assert kwargs["still_missing"] == []

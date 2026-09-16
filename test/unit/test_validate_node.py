@@ -30,8 +30,8 @@ class TestValidateNode:
             summary='Groceries',
             date='2026-05-08',
             items=[
-                ReceiptItem(name='Milk', price=4.99, quantity=1),
-                ReceiptItem(name='Bread', price=3.50, quantity=2)
+                ReceiptItem(name='Milk', price=4.99),
+                ReceiptItem(name='Bread', price=3.50)
             ],
             total=11.99
         )
@@ -313,3 +313,70 @@ class TestValidateNode:
         # Should still be valid, no total mismatch warning
         assert result["validation_result"].is_valid is True
         assert not any("Total mismatch" in warning for warning in result["validation_result"].warnings)
+
+
+    # ── Unknown merchant advisory ──────────────────────────────────────────
+
+    def test_unknown_merchant_emits_yellow(self, valid_state):
+        """YELLOW advisory when vendor is the default 'Unknown Merchant' string."""
+        valid_state["receipt"].vendor = "Unknown Merchant"
+
+        result = validate_node(valid_state)
+
+        assert result["validation_result"].is_valid is True
+        warnings = result["validation_result"].warnings
+        assert any("Unknown Merchant" in w for w in warnings)
+
+    def test_unknown_merchant_warning_has_correct_key(self, valid_state):
+        """The unknown_merchant YELLOW uses the stable key for acknowledgement tracking."""
+        valid_state["receipt"].vendor = "Unknown Merchant"
+
+        result = validate_node(valid_state)
+
+        issue = next(
+            i for i in result["validation_result"].issues if i.key == "unknown_merchant"
+        )
+        from domain.enums import ValidationSeverity
+        assert issue.severity == ValidationSeverity.YELLOW
+        assert issue.field == "vendor"
+
+    def test_known_merchant_no_unknown_warning(self, valid_state):
+        """No advisory when vendor is a real merchant name."""
+        valid_state["receipt"].vendor = "Walmart"
+
+        result = validate_node(valid_state)
+
+        assert not any(
+            "Unknown Merchant" in w for w in result["validation_result"].warnings
+        )
+
+    def test_is_green_blocks_without_acknowledgement(self, valid_state):
+        """is_green returns False while an issue key is not yet acknowledged."""
+        valid_state["receipt"].vendor = "Unknown Merchant"
+
+        result = validate_node(valid_state)
+
+        assert result["validation_result"].is_green(set()) is False
+
+    def test_is_green_passes_when_acknowledged(self, valid_state):
+        """is_green returns True once all issue keys are acknowledged."""
+        valid_state["receipt"].vendor = "Unknown Merchant"
+
+        result = validate_node(valid_state)
+        keys = {i.key for i in result["validation_result"].issues}
+
+        assert result["validation_result"].is_green(keys) is True
+
+    def test_is_green_red_override_via_acknowledged(self, valid_state):
+        """A RED issue whose key has been acknowledged (override) still allows is_green."""
+        future_year = __import__("datetime").datetime.now().year + 2
+        valid_state["receipt"].date = f"{future_year}-01-01"
+
+        result = validate_node(valid_state)
+
+        # Without acknowledgement → not green
+        assert result["validation_result"].is_green(set()) is False
+
+        # With the RED key acknowledged (user overrode it) → green
+        keys = {i.key for i in result["validation_result"].issues}
+        assert result["validation_result"].is_green(keys) is True

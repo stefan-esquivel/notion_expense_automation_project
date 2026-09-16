@@ -5,11 +5,11 @@ from pathlib import Path
 from typing import Optional
 
 from workflows.langgraph.state import ReceiptWorkflowState
-from domain.enums import WorkflowStatus
-from domain.models.workflow import ReviewData
+from domain.enums import WorkflowStatus, ValidationSeverity
+from domain.models.workflow import ReviewData, ValidationIssue
 from domain.models.expense import ExpenseSummary, SplitDetail
 from config import Config
-from services.ui import ExpenseUI
+from services.ui import ExpenseUI, OVERRIDE_SENTINEL
 from logger import get_logger
 
 logger = get_logger(__name__)
@@ -18,182 +18,265 @@ _MERCHANT_NAME_SUFFIXES = ("Order", "Bill", "Payment", "Premium", "Groceries", "
 
 
 def _extract_base_merchant_name(name: str) -> str:
-    """Strip a trailing transaction-type/plan word from a merchant name.
-
-    Given a combined string like "Amazon Order" or "YouTube Premium" (a
-    vendor name immediately followed by its transaction type), returns just
-    the base merchant name ("Amazon", "YouTube").
-    """
+    """Strip a trailing transaction-type/plan word from a merchant name."""
     parts = name.strip().split()
     if len(parts) > 1 and parts[-1] in _MERCHANT_NAME_SUFFIXES:
         return " ".join(parts[:-1])
     return name.strip()
 
 
+def _resolve_issues(
+    state: ReceiptWorkflowState,
+    ui: "ExpenseUI",
+) -> bool:
+    """Display tiered validation issues and collect fixes / acknowledgements.
+
+    Prompts the user to correct every RED field and to explicitly acknowledge
+    every YELLOW warning.  Writes corrections directly back onto
+    ``state["receipt"]`` and accumulates acknowledged keys in
+    ``state["acknowledged_warnings"]``.
+
+    Returns:
+        True  – user resolved / acknowledged everything and wants to continue.
+        False – user cancelled (KeyboardInterrupt).
+    """
+    validation_result = state.get("validation_result")
+    if not validation_result or not validation_result.issues:
+        return True
+
+    acknowledged: set = state.get("acknowledged_warnings") or set()
+    receipt = state["receipt"]
+
+    red_issues = [i for i in validation_result.issues if i.severity == ValidationSeverity.RED]
+    yellow_issues = [
+        i for i in validation_result.issues
+        if i.severity == ValidationSeverity.YELLOW and i.key not in acknowledged
+    ]
+
+    if not red_issues and not yellow_issues:
+        return True
+
+    # ── Display the issue panel ──────────────────────────────────────────
+    ui.display_validation_issues(red_issues, yellow_issues)
+
+    # ── Fix each RED issue ───────────────────────────────────────────────
+    for issue in red_issues:
+        while True:
+            fixed = ui.prompt_fix_red_issue(issue, receipt)
+            if fixed is None:
+                return False  # user cancelled
+
+            # User chose to keep the current value and override the RED error.
+            # Downgrade it to an acknowledged YELLOW so the loop can exit.
+            if fixed == OVERRIDE_SENTINEL:
+                acknowledged.add(issue.key)
+                logger.info(f"⚠️  RED issue overridden by user: {issue.key} ({issue.message})")
+                break
+
+            # Apply the corrected value to the receipt
+            if issue.field == "date":
+                receipt.date = fixed
+                break
+            elif issue.field == "vendor":
+                receipt.vendor = fixed
+                break
+            elif issue.field == "total":
+                cleaned = fixed.replace("$", "").replace(",", "").strip()
+                try:
+                    receipt.total = float(cleaned)
+                    break
+                except ValueError:
+                    from rich.console import Console
+                    console = Console()
+                    console.print("[bold red]❌ Invalid total amount. Please enter a valid number (e.g., 12.50).[/bold red]")
+
+    state["receipt"] = receipt
+
+    # ── Acknowledge each unacknowledged YELLOW issue ─────────────────────
+    for issue in yellow_issues:
+        ack = ui.prompt_acknowledge_yellow(issue)
+        if ack is None:
+            return False  # user cancelled
+        if ack:
+            acknowledged.add(issue.key)
+
+    state["acknowledged_warnings"] = acknowledged
+    return True
+
+
 def review_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
     """
     Review node: Human-in-the-loop for reviewing and correcting receipt data.
-    
-    This node:
-    1. Updates status to REVIEWING
-    2. Uses ExpenseUI to display receipt and prompt for review
-    3. Collects user inputs (edits, who paid, split confirmation)
-    4. Creates ReviewData with user inputs
-    5. Creates ExpenseSummary with final data for Notion
-    6. Stores review_data and expense_summary in state
-    
-    Args:
-        state: Current workflow state with receipt and validation_result
-        
-    Returns:
-        Updated state with review_data and expense_summary
+
+    On each pass through the validate→review loop this node:
+    1. Shows the current RED / YELLOW issues and collects fixes / acknowledgements.
+    2. Shows the receipt fields for general editing (description, amount, date).
+    3. On the first pass only: collects who paid and the split configuration.
+    4. Builds ExpenseSummary and ReviewData, then shows the final preview.
+    5. Asks for explicit Notion confirmation.
+
+    After the user makes edits the graph routes back to validate.  The loop
+    exits (→ commit) only when is_green() returns True.
     """
     state["status"] = WorkflowStatus.REVIEWING
-    
+
     try:
-        # Get receipt from state
         receipt = state.get("receipt")
         if not receipt:
             raise ValueError("No receipt data found in state")
-        
-        # Initialize UI
+
         ui = ExpenseUI(
             your_name=Config.YOUR_NAME,
-            partner_name=Config.PARTNER_NAME
+            partner_name=Config.PARTNER_NAME,
         )
-        
-        # Convert receipt to dict format expected by UI
-        workflow_input = state.get('workflow_input')
-        pdf_filename = workflow_input.file_path if workflow_input else 'Unknown'
-        
-        # Combine vendor and summary into merchant description format: "Vendor (Summary)"
+
+        # ── Step 1: resolve validation issues ────────────────────────────
+        ok = _resolve_issues(state, ui)
+        if not ok:
+            state["status"] = WorkflowStatus.FAILED
+            state["failure_reason"] = "Review cancelled by user"
+            logger.info("\n\n❌ Review cancelled")
+            return state
+
+        # Re-read receipt after possible edits in _resolve_issues
+        receipt = state["receipt"]
+
+        # ── Step 2: general receipt edit ─────────────────────────────────
+        workflow_input = state.get("workflow_input")
+        pdf_filename = workflow_input.file_path if workflow_input else "Unknown"
+
         merchant_description = receipt.vendor
         if receipt.summary:
             merchant_description = f"{receipt.vendor} {receipt.transaction_type} ({receipt.summary})"
-        
+
         receipt_info = {
-            'merchant_name': receipt.vendor,
-            'description': merchant_description,
-            'amount': receipt.total,
-            'date': datetime.fromisoformat(receipt.date) if receipt.date else datetime.now(),
-            'pdf_filename': pdf_filename
+            "merchant_name": receipt.vendor,
+            "description": merchant_description,
+            "amount": receipt.total,
+            "date": datetime.fromisoformat(receipt.date) if receipt.date else datetime.now(),
+            "pdf_filename": pdf_filename,
         }
-        
-        # Surface what augment auto-filled and what's still missing, so the
-        # user can overwrite/complete it in the edit step that follows.
+
+        # Surface scan → augment narrative on the first pass only.
+        # We detect "first pass" by checking whether expense_summary has been
+        # built yet (it's None before the first review completes).
+        is_first_pass = state.get("expense_summary") is None
+        scan_results = state.get("scan_results")
         augment_results = state.get("augment_results")
-        if augment_results and (augment_results.filled_fields or augment_results.still_missing):
+
+        if is_first_pass and scan_results:
+            originally_missing = list(scan_results.missing_fields)
+            filled_fields = augment_results.filled_fields if augment_results else {}
+            still_missing = augment_results.still_missing if augment_results else originally_missing
+
             field_values = {
-                'vendor': receipt.vendor,
-                'date': receipt.date,
-                'total': receipt.total
+                "vendor": receipt.vendor,
+                "date": receipt.date,
+                "total": receipt.total,
             }
             ui.display_scan_augment_summary(
-                filled_fields=augment_results.filled_fields,
-                still_missing=augment_results.still_missing,
-                field_values=field_values
+                originally_missing=originally_missing,
+                filled_fields=filled_fields,
+                still_missing=still_missing,
+                field_values=field_values,
             )
 
-        # Use UI to review and edit
         updated_receipt_info = ui.review_and_edit(receipt_info)
-        
-        # Validate that UI returned all required fields
-        required_fields = ['amount', 'description', 'date']
-        missing_fields = [field for field in required_fields if field not in updated_receipt_info]
+
+        # Validate UI returned required fields
+        required_fields = ["amount", "description", "date"]
+        missing_fields = [f for f in required_fields if f not in updated_receipt_info]
         if missing_fields:
-            raise ValueError(f"UI review_and_edit() did not return required fields: {', '.join(missing_fields)}")
-        
-        # Extract overrides
+            raise ValueError(
+                f"UI review_and_edit() did not return required fields: {', '.join(missing_fields)}"
+            )
+
+        # Detect overrides
         amount_override = None
         merchant_override = None
         date_override = None
-        
+
         try:
-            if updated_receipt_info['amount'] != receipt.total:
-                amount_override = updated_receipt_info['amount']
+            if updated_receipt_info["amount"] != receipt.total:
+                amount_override = updated_receipt_info["amount"]
         except (KeyError, TypeError) as e:
-            raise ValueError(f"Failed to process amount from UI: {e}. Updated receipt info: {updated_receipt_info}")
-        
+            raise ValueError(f"Failed to process amount from UI: {e}")
+
         try:
-            # Compare against the combined merchant_description format
             original_description = receipt.vendor
             if receipt.summary:
                 original_description = f"{receipt.vendor} {receipt.transaction_type} ({receipt.summary})"
-            
-            if updated_receipt_info['description'] != original_description:
-                merchant_override = updated_receipt_info['description']
+            if updated_receipt_info["description"] != original_description:
+                merchant_override = updated_receipt_info["description"]
         except (KeyError, TypeError) as e:
-            raise ValueError(f"Failed to process description from UI: {e}. Updated receipt info: {updated_receipt_info}")
-        
+            raise ValueError(f"Failed to process description from UI: {e}")
+
         try:
             original_date = datetime.fromisoformat(receipt.date) if receipt.date else datetime.now()
-            if updated_receipt_info['date'] != original_date:
-                date_override = updated_receipt_info['date']
+            if updated_receipt_info["date"] != original_date:
+                date_override = updated_receipt_info["date"]
         except (KeyError, TypeError, ValueError) as e:
-            raise ValueError(f"Failed to process date from UI: {e}. Updated receipt info: {updated_receipt_info}")
-        
-        # Use UI to select who paid
-        paid_by = ui.select_payer()
-        
-        # Use UI to confirm split
-        final_amount = amount_override if amount_override else receipt.total
-        use_split, split_percentage = ui.confirm_split(final_amount, Config.DEFAULT_SPLIT_PERCENTAGE)
-        
-        # Create ReviewData
-        review_data = ReviewData(
-            paid_by=paid_by,
-            amount_override=amount_override,
-            merchant_override=merchant_override,
-            date_override=date_override,
-            notes=None,  # UI doesn't collect notes in review_and_edit
-            approved=True,  # If we got here, user approved
-            reviewed_at=datetime.now()
-        )
+            raise ValueError(f"Failed to process date from UI: {e}")
 
-        # Determine final values (use overrides if present, otherwise use original)
-        final_merchant_description = merchant_override if merchant_override else updated_receipt_info['description']
-        final_date = date_override if date_override else updated_receipt_info['date']
-        final_amount = amount_override if amount_override else updated_receipt_info['amount']
-        
-        # Get receipt file path
+        # Apply edits back onto the receipt so re-validation sees them
+        if amount_override is not None:
+            receipt.total = amount_override
+        if date_override is not None:
+            receipt.date = date_override.isoformat()
+        if merchant_override is not None:
+            receipt.vendor = merchant_override
+
+        state["receipt"] = receipt
+
+        # ── Step 3: payer + split (re-use from previous pass if present) ─
+        existing_summary = state.get("expense_summary")
+
+        if existing_summary:
+            # Preserve payer / split choices from a previous loop iteration
+            paid_by = existing_summary.paid_by
+            use_split = existing_summary.splits is not None
+            split_percentage = (
+                existing_summary.splits[0].share_percent if existing_summary.splits else Config.DEFAULT_SPLIT_PERCENTAGE
+            )
+        else:
+            paid_by = ui.select_payer()
+            final_amount_for_split = amount_override if amount_override else receipt.total
+            use_split, split_percentage = ui.confirm_split(final_amount_for_split, Config.DEFAULT_SPLIT_PERCENTAGE)
+
+        # ── Step 4: build ExpenseSummary ──────────────────────────────────
+        final_merchant_description = merchant_override if merchant_override else updated_receipt_info["description"]
+        final_date = date_override if date_override else updated_receipt_info["date"]
+        final_amount = amount_override if amount_override else updated_receipt_info["amount"]
+
         receipt_file_path: Optional[Path] = None
         if workflow_input and workflow_input.file_path:
             receipt_file_path = Path(workflow_input.file_path)
-        
-        # Generate receipt filename
+
         receipt_filename = None
         if receipt_file_path:
-            # Format: YYYY-MM-DD_Merchant_Description_$Amount.pdf
-            date_str = final_date.strftime('%Y-%m-%d')
-            merchant_clean = final_merchant_description.replace(' ', '_').replace('/', '_')
+            date_str = final_date.strftime("%Y-%m-%d")
+            merchant_clean = final_merchant_description.replace(" ", "_").replace("/", "_")
             receipt_filename = f"{date_str}_{merchant_clean}_${final_amount:.2f}.pdf"
-        
-        # Create splits list if split is enabled
+
         splits = None
         if use_split:
-            # Determine who owes the split (the person who didn't pay)
             split_person = Config.PARTNER_NAME if paid_by == Config.YOUR_NAME else Config.YOUR_NAME
-            
-            # Generate split title with format: "Person's Vendor Split (Summary)"
-            # Extract vendor and summary from final_merchant_description
-            if '(' in final_merchant_description and ')' in final_merchant_description:
-                # Format is "Vendor (Summary)"
-                vendor_part = final_merchant_description.split('(')[0].strip()
-                summary_part = final_merchant_description.split('(')[1].split(')')[0].strip()
+
+            if "(" in final_merchant_description and ")" in final_merchant_description:
+                vendor_part = final_merchant_description.split("(")[0].strip()
+                summary_part = final_merchant_description.split("(")[1].split(")")[0].strip()
                 split_title = f"{split_person}'s {vendor_part} Split ({summary_part})"
             else:
-                # No summary, just use vendor
                 split_title = f"{split_person}'s {final_merchant_description} Split"
-            
+
             splits = [
                 SplitDetail(
                     person=split_person,
                     share_percent=split_percentage,
-                    title=split_title
+                    title=split_title,
                 )
             ]
-        
-        # Create ExpenseSummary for Notion submission
+
         expense_summary = ExpenseSummary(
             merchant_description=final_merchant_description,
             date=final_date,
@@ -201,66 +284,66 @@ def review_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
             paid_by=paid_by,
             receipt_file_path=receipt_file_path,
             receipt_filename=receipt_filename,
-            splits=splits
+            splits=splits,
         )
-        
-        # Prepare data for UI preview
+
+        # ── Step 5: preview + Notion confirmation ─────────────────────────
         expense_data = {
-            'description': expense_summary.merchant_description,
-            'date': expense_summary.date,
-            'amount': expense_summary.amount,
-            'paid_by': expense_summary.paid_by,
-            'receipt_filename': expense_summary.receipt_filename
+            "description": expense_summary.merchant_description,
+            "date": expense_summary.date,
+            "amount": expense_summary.amount,
+            "paid_by": expense_summary.paid_by,
+            "receipt_filename": expense_summary.receipt_filename,
         }
-        
+
         split_data = None
         if expense_summary.splits:
-            split = expense_summary.splits[0]  # Get first split for preview
+            split = expense_summary.splits[0]
             split_data = {
-                'title': split.title,
-                'person': split.person,
-                'share_percentage': split.share_percent
+                "title": split.title,
+                "person": split.person,
+                "share_percentage": split.share_percent,
             }
 
-        # Display final preview
         ui.display_final_preview(expense_data, split_data)
-        
-        # Confirm before sending to Notion
+
         user_confirmed = ui.confirm_send_to_notion()
-        
         if not user_confirmed:
-            # User declined to send to Notion
             state["status"] = WorkflowStatus.FAILED
             state["failure_reason"] = "User declined to send data to Notion"
-            logger.info(f"\n\n❌ User declined to send data to Notion")
+            logger.info("\n\n❌ User declined to send data to Notion")
             return state
-        
-        # Store in state
-        state["review_data"] = review_data
+
+        # ── Persist ───────────────────────────────────────────────────────
+        state["review_data"] = ReviewData(
+            paid_by=paid_by,
+            amount_override=amount_override,
+            merchant_override=merchant_override,
+            date_override=date_override,
+            notes=None,
+            approved=True,
+            reviewed_at=datetime.now(),
+        )
         state["expense_summary"] = expense_summary
-        
+
         return state
-        
+
     except KeyboardInterrupt:
-        # User cancelled review
         state["status"] = WorkflowStatus.FAILED
         state["failure_reason"] = "Review cancelled by user"
-        logger.info(f"\n\n❌ Review cancelled")
+        logger.info("\n\n❌ Review cancelled")
         return state
-        
+
     except ValueError as e:
-        # Handle validation errors with detailed message
         state["status"] = WorkflowStatus.FAILED
         state["failure_reason"] = f"Review validation error: {str(e)}"
         logger.error(f"\n✗ Review validation error: {e}")
         return state
-        
+
     except Exception as e:
-        # Handle unexpected review failures with full context
         import traceback
-        error_details = traceback.format_exc()
         state["status"] = WorkflowStatus.FAILED
         state["failure_reason"] = f"Review failed: {str(e)}"
         logger.error(f"\n✗ Review error: {e}")
-        logger.debug(f"\nFull error details:\n{error_details}")
+        logger.debug(f"\nFull error details:\n{traceback.format_exc()}")
         return state

@@ -209,12 +209,18 @@ class PDFExtractor:
             logger.warning(f"LLM item extraction failed: {e}")
             return []
     
-    def parse_receipt(self, pdf_path: Path) -> Dict[str, Any]:
+    def parse_receipt(self, pdf_path: Path, raw_text: Optional[str] = None) -> Dict[str, Any]:
         """
         Parse a receipt PDF and extract all relevant information.
         Returns a dictionary with merchant, amount, date, and items.
+
+        Args:
+            pdf_path: Path to the receipt PDF (used for pdf_filename, and to
+                extract text from if raw_text isn't already available)
+            raw_text: Already-extracted text, if the caller has it. Skips a
+                redundant re-extraction from disk when provided.
         """
-        text = self.extract_text(pdf_path)
+        text = raw_text if raw_text is not None else self.extract_text(pdf_path)
         
         transaction_type, merchant_name = self.detect_merchant(text)
         amount = self.extract_amount(text)

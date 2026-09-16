@@ -15,18 +15,57 @@ from workflows.langgraph.nodes.validate_node import validate_node
 from workflows.langgraph.nodes.commit_node import commit_node
 from workflows.langgraph.state import ReceiptWorkflowState
 
-def missing_information(state: ReceiptWorkflowState) -> bool:
+def _route_or_end(next_node: str):
+    """Build a router that stops the graph if the previous node failed.
+
+    Returns a function suitable for add_conditional_edges: "failed" (routed
+    to END) if the node that just ran set status to FAILED, else "continue"
+    (routed to next_node).
     """
-    Check if any required information is missing from the receipt.
+    def _router(state: ReceiptWorkflowState) -> str:
+        return "failed" if state.get("status") == WorkflowStatus.FAILED else "continue"
+    return _router
+
+
+def missing_information(state: ReceiptWorkflowState) -> str:
+    """
+    Route after scan: stop if scan (or an earlier node) failed, otherwise
+    check if any required information is missing from the receipt.
 
     Args:
         state: The current state of the receipt workflow.
 
     Returns:
-        A boolean indicating whether any required information is missing.
+        "failed", "augment", or "enrich".
     """
+    if state.get("status") == WorkflowStatus.FAILED:
+        return "failed"
     scan_results = state.get("scan_results")
-    return bool(scan_results and scan_results.has_missing_data)
+    return "augment" if (scan_results and scan_results.has_missing_data) else "enrich"
+
+
+def _route_after_review(state: ReceiptWorkflowState) -> str:
+    """Route after review back to validate or forward to commit.
+
+    Returns:
+        "failed"   – review node itself failed (user cancelled, etc.)
+        "validate" – loop: user made edits; re-run validation
+        "commit"   – all issues are GREEN; safe to commit
+    """
+    if state.get("status") == WorkflowStatus.FAILED:
+        return "failed"
+
+    # Re-run validation so we evaluate the updated/corrected receipt
+    state = validate_node(state)
+
+    validation_result = state.get("validation_result")
+    acknowledged = state.get("acknowledged_warnings") or set()
+
+    # If there is no validation result yet, or it is not green, go back to validate.
+    if validation_result is None or not validation_result.is_green(acknowledged):
+        return "validate"
+
+    return "commit"
 
 
 def build_graph():
@@ -44,22 +83,29 @@ def build_graph():
 
     graph.set_entry_point("ingest")
 
-    graph.add_edge("ingest", "extract")
+    graph.add_conditional_edges("ingest", _route_or_end("extract"), {"continue": "extract", "failed": END})
 
-    graph.add_edge("extract", "scan")
+    graph.add_conditional_edges("extract", _route_or_end("scan"), {"continue": "scan", "failed": END})
 
     graph.add_conditional_edges(
         "scan",
-        missing_information, {True:"augment", False : "enrich"})
+        missing_information, {"failed": END, "augment": "augment", "enrich": "enrich"})
 
-    graph.add_edge("augment", "enrich")
+    graph.add_conditional_edges("augment", _route_or_end("enrich"), {"continue": "enrich", "failed": END})
 
-    graph.add_edge("enrich", "validate")
+    graph.add_conditional_edges("enrich", _route_or_end("validate"), {"continue": "validate", "failed": END})
 
-    # For prototyping: Always go to review after validation
-    graph.add_edge("validate", "review")
+    graph.add_conditional_edges(
+        "validate",
+        _route_or_end("review"),
+        {"continue": "review", "failed": END},
+    )
 
-    graph.add_edge("review", "commit")
+    graph.add_conditional_edges(
+        "review",
+        _route_after_review,
+        {"validate": "validate", "commit": "commit", "failed": END},
+    )
 
     graph.add_edge("commit", END)
 
@@ -89,6 +135,7 @@ def create_initial_state(pdf_path: str, source: Sources = Sources.LOCAL_FOLDER) 
         "augment_results": None,
         "enriched_receipt": None,
         "validation_result": None,
+        "acknowledged_warnings": set(),
         "review_data": None,
         "expense_summary": None,
         "results": None,

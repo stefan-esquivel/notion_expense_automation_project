@@ -32,6 +32,3 @@ class ReceiptItem(BaseModel):
         examples=["produce", "dairy", "meat", "seafood", "bakery", "pantry"]
     )
 
-
-# Backwards compatibility alias
-GroceryItem = ReceiptItem

@@ -2,7 +2,6 @@ from config import Config
 from services.ui import ExpenseUI
 from workflows.langgraph.state import ReceiptWorkflowState
 from domain.enums import WorkflowStatus
-from services.pdf_extractor import PDFExtractor
 from pathlib import Path
 from logger import get_logger
 
@@ -45,17 +44,10 @@ def ingest_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
         state["failure_reason"] = f"File does not exist: {workflow_input.file_path}"
         return state
     
-    # Extract raw text from PDF
-    try:
-        ui.display_processing(workflow_input.file_path)
-        extractor = PDFExtractor()
-        raw_text = extractor.extract_text(file_path)
-        workflow_input.raw_text = raw_text
-    except Exception as e:
-        state["status"] = WorkflowStatus.FAILED
-        state["failure_reason"] = f"Failed to extract text from PDF: {str(e)}"
-        return state
-    
+    # raw_text is already populated by create_initial_state() before the
+    # graph starts, so there's nothing left to extract here.
+    ui.display_processing(workflow_input.file_path)
+
     # Log ingestion
     logger.info(f"Ingesting receipt from: {workflow_input.file_path}")
     logger.info(f"Source: {workflow_input.source.value}")

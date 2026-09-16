@@ -10,3 +10,13 @@ test/fixtures/pdfs/2026-03-07_Amazon_Order_Baking_Sheets_$49.60.pdf:c6d5632278e4
 # Synthetic Walmart fixture — "credit_card_number" hit is the masked
 # "0000...0000" placeholder digits, not a real card number.
 test/fixtures/pdfs/2026-03-04_Walmart_Order_Meatballs_$80.59.pdf:d59327ba8f03eddad652aa7ffebe706032bea829377c44175f0a2696051f9199
+
+# Synthetic TechZone fixture — email/phone/address are all invented test data
+# used to verify future-date RED validation. No real PII.
+receipts/test_input/techzone_future_date_red.pdf:4e2b0d18f219fb8f6925a6f5cde2335b086a5e0599633469bc6bd7ad774304a9
+test/fixtures/pdfs/techzone_future_date_red.pdf:4e2b0d18f219fb8f6925a6f5cde2335b086a5e0599633469bc6bd7ad774304a9
+
+# Synthetic Maple Street Organics fixture — phone/address are invented test
+# data used to verify unknown-merchant YELLOW + missing-date RED validation.
+receipts/test_input/maple_street_organics_augment.pdf:f1d236667c695a2fba8b39ce9398efcaadf7067e47af14bc7dd1dd6612997d45
+test/fixtures/pdfs/maple_street_organics_augment.pdf:f1d236667c695a2fba8b39ce9398efcaadf7067e47af14bc7dd1dd6612997d45

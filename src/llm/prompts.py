@@ -18,6 +18,7 @@ Extract and return JSON with these fields:
 - date: Transaction date in ISO format YYYY-MM-DD (string)
 - total_amount: Total amount paid (number)
 - currency: Currency code like "USD" or "CAD" (string, default "CAD")
+- transaction_type: Type of transaction capitalized, such as "Purchase", "Bill", "Charge", or "Refund" (string, default "Purchase")
 - items: List of purchased items with name and price (array, can be empty)
 
 Important:
@@ -33,6 +34,7 @@ Example output:
   "date": "2026-03-15",
   "total_amount": 92.01,
   "currency": "CAD",
+  "transaction_type": "Purchase",
   "items": []
 }}"""
 

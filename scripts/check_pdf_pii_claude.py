@@ -15,6 +15,12 @@ human already looked at it.
 import json
 import subprocess
 import sys
+from pathlib import Path
+
+# Add scripts directory to sys.path so check_pdf_pii can be imported from anywhere
+scripts_dir = Path(__file__).resolve().parent
+if str(scripts_dir) not in sys.path:
+    sys.path.insert(0, str(scripts_dir))
 
 from check_pdf_pii import (
     ALLOWLIST_PATH,

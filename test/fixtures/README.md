@@ -18,12 +18,16 @@ Located in `pdfs/`:
 
 - `2026-03-04_Walmart_Order_Meatballs_$80.59.pdf` - Walmart receipt with date 2026-03-04
 - `2026-03-07_Amazon_Order_Baking_Sheets_$49.60.pdf` - Amazon receipt with date 2026-03-07
+- `techzone_future_date_red.pdf` - TechZone Electronics order dated 2030-06-15 (future date → RED flag)
+- `maple_street_organics_augment.pdf` - Blank/unreadable PDF (no text → Unknown Merchant → YELLOW advisory)
+- `walmart_order_details.pdf` - Walmart.ca online order from Sep 2026 (valid receipt, no flags)
 
 These PDFs are used to test:
 - Date extraction (YYYY-MM-DD format)
 - Merchant detection
 - Amount parsing
 - Item description extraction
+- Validation flag outcomes (RED future-date, YELLOW unknown-merchant)
 
 ## JSON Fixtures
 

@@ -27,7 +27,7 @@ class TestAugmentNode:
             transaction_type='Order',
             summary='Groceries',
             date='',
-            items=[ReceiptItem(name='Milk', price=4.99, quantity=1)],
+            items=[ReceiptItem(name='Milk', price=4.99)],
             total=11.99
         )
 
@@ -66,7 +66,7 @@ class TestAugmentNode:
         with patch('workflows.langgraph.nodes.augment_node.llm_extract_receipt', return_value=llm_guess):
             result = augment_node(valid_state)
 
-        assert result["status"] == WorkflowStatus.AUGMENTING
+        assert result["status"] == WorkflowStatus.ENRICHING
         assert result["receipt"].date == "2026-05-08"
         assert result["augment_results"].filled_fields == {"date": "llm_extraction"}
         assert result["augment_results"].still_missing == []
@@ -96,7 +96,7 @@ class TestAugmentNode:
         ):
             result = augment_node(valid_state)
 
-        assert result["status"] == WorkflowStatus.AUGMENTING
+        assert result["status"] == WorkflowStatus.ENRICHING
         assert result["augment_results"].filled_fields == {}
         assert result["augment_results"].still_missing == ["date"]
 

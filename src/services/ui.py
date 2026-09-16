@@ -1,6 +1,6 @@
 """User interface module for interactive prompts and displays."""
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -53,6 +53,40 @@ class ExpenseUI:
         console.print(table)
         console.print("\n")
     
+    def display_scan_augment_summary(
+        self,
+        filled_fields: Dict[str, str],
+        still_missing: List[str],
+        field_values: Dict[str, Any]
+    ):
+        """Display which fields augment auto-filled and which are still missing.
+
+        Args:
+            filled_fields: Maps field name -> method used to auto-fill it
+            still_missing: Field names still missing after augment ran
+            field_values: Maps field name -> current value, for display
+        """
+        if not filled_fields and not still_missing:
+            return
+
+        if filled_fields:
+            table = Table(title="🔧 Auto-Filled by Augment (review and overwrite if wrong)", show_header=True)
+            table.add_column("Field", style="cyan", width=20)
+            table.add_column("Value", style="green")
+            table.add_column("How", style="magenta")
+
+            for field, method in filled_fields.items():
+                table.add_row(field, str(field_values.get(field, "N/A")), method)
+
+            console.print("\n")
+            console.print(table)
+
+        if still_missing:
+            console.print(
+                f"\n[bold red]⚠️  Still missing — please provide during review: "
+                f"{', '.join(still_missing)}[/bold red]\n"
+            )
+
     def review_and_edit(self, receipt_info: Dict[str, Any]) -> Dict[str, Any]:
         """
         Allow user to review and edit extracted information.
@@ -107,6 +141,8 @@ class ExpenseUI:
             ),
         ]
         answers = inquirer.prompt(questions)
+        if answers is None:
+            raise KeyboardInterrupt("User cancelled selection")
         return answers['payer']
     
     def confirm_split(self, amount: float, split_percentage: float) -> tuple[bool, float]:
@@ -137,6 +173,9 @@ class ExpenseUI:
             ),
         ]
         answers = inquirer.prompt(questions)
+        
+        if answers is None:
+            raise KeyboardInterrupt("User cancelled selection")
         
         if answers['split_type'] == 'No split (100% individual expense)':
             return False, 0.0
@@ -204,7 +243,7 @@ class ExpenseUI:
             split_table.add_row("Icon", person_emoji)
             split_table.add_row("Title", split_data['title'])
             split_table.add_row("Person (Owes)", person_display)
-            split_table.add_row("Date", split_data['date'].strftime('%B %d, %Y'))
+            split_table.add_row("Date", expense_data['date'].strftime('%B %d, %Y'))
             split_table.add_row("Share Percentage", f"%{split_data['share_percentage']:.2f}")
             
             console.print(split_table)

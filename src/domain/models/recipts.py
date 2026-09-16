@@ -1,0 +1,72 @@
+
+from uuid import UUID
+from typing import List, Optional
+from pydantic import BaseModel, Field
+from domain.models.receipt_item import ReceiptItem
+
+
+class Receipt(BaseModel):
+    """Raw receipt data extracted from PDF.
+    
+    This model represents the initial extraction phase before any AI processing
+    or normalization. Data may be messy and require cleaning/validation.
+    """
+    '''
+    may convert to uuid
+    '''
+    recipt_id: Optional[str] = Field(
+        default=None,
+        description="Unique identifier for this receipt (order ID from merchant, or None if not available)"
+    )
+
+    summary: Optional[str] = Field(
+        default=None,
+        description="Optional description of items purchased (eg. (tomatoes, bananas, etc.))"
+    )
+    
+    vendor: str = Field(
+        description="Raw vendor/merchant name as extracted from PDF (may be messy, e.g., 'WALMART SUPERCENTER #1234')",
+        min_length=1
+    )
+
+    transaction_type: str = Field(
+        description="Raw type of receipt expense (e.g., 'Bill', 'Order', 'Misc')",
+        min_length=1
+    )
+    
+    date: str = Field(
+        description="Raw date string from receipt (format may vary, e.g., '2026-03-15', 'Mar 15, 2026', '03/15/2026')"
+    )
+    
+    items: List[ReceiptItem] = Field(
+        default_factory=list,
+        description="List of individual items purchased (empty for non-itemized receipts)"
+    )
+    
+    total: float = Field(
+        description="Total amount paid on the receipt",
+        gt=0,
+        examples=[92.01, 49.60, 150.00]
+    )
+
+
+REQUIRED_RECEIPT_FIELDS: List[str] = ["vendor", "date", "total"]
+
+
+def get_missing_required_fields(receipt: "Receipt") -> List[str]:
+    """Return the names of required Receipt fields that are missing or empty.
+
+    Single source of truth for "field presence" shared by scan_node
+    (pre-enrichment gate) and validate_node (post-enrichment safety net),
+    so the two phases never disagree about what "required" means.
+    """
+    missing: List[str] = []
+
+    if not receipt.vendor or receipt.vendor.strip() == "":
+        missing.append("vendor")
+    if not receipt.date or receipt.date.strip() == "":
+        missing.append("date")
+    if receipt.total is None:
+        missing.append("total")
+
+    return missing

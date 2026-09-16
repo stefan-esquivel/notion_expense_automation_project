@@ -1,14 +1,7 @@
 """Main application entry point."""
-import sys
 from pathlib import Path
-from datetime import datetime
-from typing import Optional
-
-import notion_client
 
 from config import Config
-from services.pdf_extractor import PDFExtractor
-from services.file_organizer import FileOrganizer
 from services.notion_api import NotionExpenseClient
 from services.ui import ExpenseUI
 from logger import get_logger

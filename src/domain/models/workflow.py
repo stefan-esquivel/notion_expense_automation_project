@@ -1,7 +1,7 @@
 """Workflow-specific models for LangGraph state management."""
 
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime
 from pathlib import Path
 
@@ -118,6 +118,43 @@ class WorkflowResults(BaseModel):
     timestamp: datetime = Field(
         default_factory=datetime.now,
         description="Timestamp when the workflow completed"
+    )
+class ScanResults(BaseModel):
+    """Results from the scan phase.
+
+    Captures which required receipt fields are missing, used to decide
+    whether the workflow needs to route through augment before enrichment.
+    """
+
+    has_missing_data: bool = Field(
+        description="Whether any required field is missing from the receipt"
+    )
+
+    missing_fields: List[str] = Field(
+        default_factory=list,
+        description="Names of required Receipt fields that are missing or empty",
+        examples=[["vendor", "date"], ["date"], []]
+    )
+
+
+class AugmentResults(BaseModel):
+    """Results from the augment phase.
+
+    Records which previously-missing receipt fields augment was able to
+    auto-fill (and how), so the review step can show the user what to
+    double-check, plus which required fields could not be filled.
+    """
+
+    filled_fields: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Maps each auto-filled field name to the method used to fill it",
+        examples=[{"date": "llm_extraction"}, {}]
+    )
+
+    still_missing: List[str] = Field(
+        default_factory=list,
+        description="Required fields augment could not fill; user must provide these during review",
+        examples=[["date"], []]
     )
 
 

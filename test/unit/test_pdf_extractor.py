@@ -138,18 +138,18 @@ class TestPDFExtractor:
     def test_detect_merchant_walmart(self, extractor):
         """Test Walmart merchant detection"""
         text = "Order details - Walmart.ca"
-        merchant_type, merchant_name = extractor.detect_merchant(text)
-        
-        assert merchant_type == 'walmart'
-        assert merchant_name == 'Walmart Order'
-    
+        transaction_type, merchant_name = extractor.detect_merchant(text)
+
+        assert transaction_type == 'Order'
+        assert merchant_name == 'Walmart'
+
     def test_detect_merchant_amazon(self, extractor):
         """Test Amazon merchant detection"""
         text = "Amazon.com Order Receipt"
-        merchant_type, merchant_name = extractor.detect_merchant(text)
-        
-        assert merchant_type == 'amazon'
-        assert merchant_name == 'Amazon Order'
+        transaction_type, merchant_name = extractor.detect_merchant(text)
+
+        assert transaction_type == 'Order'
+        assert merchant_name == 'Amazon'
     
     def test_detect_merchant_unknown(self, extractor):
         """Test unknown merchant detection"""
@@ -216,7 +216,8 @@ class TestPDFExtractor:
         pdf_path = fixtures_dir / "pdfs" / "2026-03-04_Walmart_Order_Meatballs_$80.59.pdf"
         result = extractor.parse_receipt(pdf_path)
         
-        assert result['merchant_name'] == 'Walmart Order'
+        assert result['merchant_name'] == 'Walmart'
+        assert result['transaction_type'] == 'Order'
         assert result['amount'] == 80.59
         assert result['date'] is not None
         assert result['date'].year == 2026
@@ -231,7 +232,8 @@ class TestPDFExtractor:
         pdf_path = fixtures_dir / "pdfs" / "2026-03-07_Amazon_Order_Baking_Sheets_$49.60.pdf"
         result = extractor.parse_receipt(pdf_path)
         
-        assert result['merchant_name'] == 'Amazon Order'
+        assert result['merchant_name'] == 'Amazon'
+        assert result['transaction_type'] == 'Order'
         assert result['amount'] == 49.60
         assert result['date'] is not None
         assert result['date'].year == 2026

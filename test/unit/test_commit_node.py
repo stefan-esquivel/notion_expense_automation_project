@@ -32,6 +32,7 @@ class TestCommitNode:
             mock.YOUR_NAME = "Jon Doe"
             mock.PARTNER_NAME = "Jane Doe"
             mock.PROCESSED_FOLDER = "/path/to/processed"
+            mock.QA_SKIP_COMMIT = False
             yield mock
     
     @pytest.fixture
@@ -87,6 +88,7 @@ class TestCommitNode:
             receipt=Receipt(
                 recipt_id='ORD-123',
                 vendor='Walmart',
+                transaction_type='Order',
                 summary='Groceries',
                 date='2026-05-08',
                 items=[],
@@ -192,6 +194,7 @@ class TestCommitNode:
             mock_config.NOTION_API_TOKEN = None
             mock_config.YOUR_NAME = "Jon Doe"
             mock_config.PARTNER_NAME = "Jane Doe"
+            mock_config.QA_SKIP_COMMIT = False
             
             result = commit_node(valid_state)
             
@@ -205,6 +208,7 @@ class TestCommitNode:
             mock_config.EXPENSE_TABLE_DATABASE_ID = None
             mock_config.YOUR_NAME = "Jon Doe"
             mock_config.PARTNER_NAME = "Jane Doe"
+            mock_config.QA_SKIP_COMMIT = False
             
             result = commit_node(valid_state)
             

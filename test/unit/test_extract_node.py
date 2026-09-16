@@ -54,6 +54,7 @@ class TestExtractNode:
         return {
             'order_id': 'ORD-12345',
             'merchant_name': 'Walmart',
+            'transaction_type': 'Order',
             'summary': 'Groceries',
             'date': datetime(2026, 5, 8),
             'items': [
@@ -194,6 +195,7 @@ class TestExtractNode:
         extracted_data = {
             'order_id': 'ORD-12345',
             'merchant_name': 'Amazon',
+            'transaction_type': 'Order',
             'summary': 'Books',
             'date': None,
             'items': [],
@@ -217,6 +219,7 @@ class TestExtractNode:
         extracted_data = {
             'order_id': 'ORD-12345',
             'merchant_name': 'Netflix',
+            'transaction_type': 'Bill',
             'summary': 'Subscription',
             'date': datetime(2026, 5, 1),
             'items': [],
@@ -239,6 +242,7 @@ class TestExtractNode:
         extracted_data = {
             'order_id': 'BILL-001',
             'merchant_name': 'Electrical Bill',
+            'transaction_type': 'Charge',
             'summary': 'Monthly',
             'date': datetime(2026, 5, 1),
             'items': [],
@@ -282,6 +286,7 @@ class TestExtractNode:
         extracted_data = {
             'order_id': 'ORD-999',
             'merchant_name': 'Test Store',
+            'transaction_type': 'Order',
             'summary': 'Test',
             'date': test_date,
             'items': [],
@@ -309,6 +314,7 @@ class TestExtractNode:
         extracted_data = {
             'order_id': 'ORD-ITEMS',
             'merchant_name': 'Store',
+            'transaction_type': 'Order',
             'summary': 'Multiple Items',
             'date': datetime(2026, 5, 8),
             'items': items,

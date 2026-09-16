@@ -35,17 +35,11 @@ class Config:
     # Environment tracking
     ENVIRONMENT = CURRENT_ENV
     
-    # QA Mode - Skip Notion commits and file moving for testing
-    QA_SKIP_COMMIT = os.getenv('QA_SKIP_COMMIT', 'false').lower() == 'true'
-    
     # Notion API
     NOTION_API_TOKEN = os.getenv('NOTION_API_TOKEN')
     EXPENSE_TABLE_DATABASE_ID = os.getenv('EXPENSE_TABLE_DATABASE_ID')
     SPLIT_DETAILS_DATABASE_ID = os.getenv('SPLIT_DETAILS_DATABASE_ID')
     BALANCES_PAGE_ID = os.getenv('BALANCES_PAGE_ID')
-    
-    # OpenAI API
-    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
     
     # User Configuration
     YOUR_NAME = os.getenv('YOUR_NAME', 'You')

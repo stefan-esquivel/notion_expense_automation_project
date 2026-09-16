@@ -2,29 +2,15 @@
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 import pdfplumber
 from dateutil import parser as date_parser
-
-from domain.models.receipt_item import ReceiptItem
-from llm.client import ReceiptLLMClient
-from logger import get_logger
-
-logger = get_logger(__name__)
 
 
 class PDFExtractor:
     """Extract and parse information from receipt PDFs."""
     
-    def __init__(self, use_llm_for_items: bool = False):
-        """
-        Initialize PDF extractor.
-        
-        Args:
-            use_llm_for_items: If True, use LLM to extract items. If False, use rule-based extraction.
-        """
-        self.use_llm_for_items = use_llm_for_items
-        self.llm_client = None
+    def __init__(self):
         self.merchant_patterns = {
             'walmart': r'walmart',
             'amazon': r'amazon',
@@ -61,21 +47,23 @@ class PDFExtractor:
             if re.search(pattern, text_lower):
                 # Extract more specific merchant name
                 if merchant_type == 'walmart':
-                    return ('Order', 'Walmart')
+                    return ('walmart', 'Walmart Order')
                 elif merchant_type == 'amazon':
-                    return ('Order', 'Amazon')
+                    return ('amazon', 'Amazon Order')
                 elif merchant_type == 'electrical':
-                    return ('Charge', 'Electrical Bill')
+                    return ('electrical', 'Electrical Bill')
                 elif merchant_type == 'rent':
-                    return ('Charge', 'Rent')
+                    return ('rent', 'Rent')
                 elif merchant_type == 'netflix':
-                    return ('Bill', 'Netflix')
+                    return ('netflix', 'Netflix')
                 elif merchant_type == 'youtube':
-                    return ('Bill', 'Youtube Premium')
+                    return ('youtube', 'Youtube Premium')
                 elif merchant_type == 'parking':
                     return ('parking', 'Parking')
                 elif merchant_type == 'longo':
-                    return ('expense', "Longo's")
+                    return ('longo', "Longo's Groceries")
+                elif merchant_type == 'tv':
+                    return ('tv', 'TV Payment')
         
         return ('unknown', 'Unknown Merchant')
     
@@ -135,119 +123,61 @@ class PDFExtractor:
         
         return None
     
-    # def extract_items_description(self, text: str, merchant_type: str) -> list:
-    #     """Extract a description of items purchased based on merchant type."""
-    #     text_lower = text.lower()
+    def extract_items_description(self, text: str, merchant_type: str) -> str:
+        """Extract a description of items purchased based on merchant type."""
+        text_lower = text.lower()
         
-    #     # Common food items
-    #     food_keywords = [
-    #         'chicken', 'shrimp', 'salmon', 'beef', 'pork',
-    #         'teriyaki', 'mediterranean', 'chipotle', 'greek',
-    #         'soup', 'stir fry', 'krupnik', 'basics',
-    #         'eggs', 'onion', 'fiber', 'hummus', 'tomato'
-    #     ]
+        # Common food items
+        food_keywords = [
+            'chicken', 'shrimp', 'salmon', 'beef', 'pork',
+            'teriyaki', 'mediterranean', 'chipotle', 'greek',
+            'soup', 'stir fry', 'krupnik', 'basics',
+            'eggs', 'onion', 'fiber', 'hummus', 'tomato'
+        ]
         
-    #     # Amazon items
-    #     amazon_keywords = [
-    #         'scale', 'tray', 'bulbs', 'soda', 'club soda', 'baking sheet'
-    #     ]
+        # Amazon items
+        amazon_keywords = [
+            'scale', 'tray', 'bulbs', 'soda', 'club soda'
+        ]
         
-    #     found_items = []
+        found_items = []
         
-    #     if merchant_type == 'walmart':
-    #         for keyword in food_keywords:
-    #             if keyword in text_lower:
-    #                 found_items.append(keyword.title())
-    #     elif merchant_type == 'amazon':
-    #         for keyword in amazon_keywords:
-    #             if keyword in text_lower:
-    #                 found_items.append(keyword.title())
+        if merchant_type == 'walmart':
+            for keyword in food_keywords:
+                if keyword in text_lower:
+                    found_items.append(keyword.title())
+        elif merchant_type == 'amazon':
+            for keyword in amazon_keywords:
+                if keyword in text_lower:
+                    found_items.append(keyword.title())
         
-    #     return found_items
-    
-    def extract_items(self, text: str) -> List[ReceiptItem]:
-        """
-        Extract individual items from receipt text.
+        if found_items:
+            return ' '.join(found_items[:3])  # Limit to 3 items
         
-        Uses LLM if use_llm_for_items is True, otherwise returns empty list.
-        
-        Args:
-            text: Raw receipt text
-            
-        Returns:
-            List of ReceiptItem objects
-        """
-        if not self.use_llm_for_items:
-            return []
-        
-        try:
-            # Initialize LLM client if needed
-            if self.llm_client is None:
-                self.llm_client = ReceiptLLMClient()
-            
-            # Call LLM to extract items
-            result = self.llm_client.extract_items(text)
-            items_data = result.get("items", [])
-            
-            # Convert to ReceiptItem objects
-            grocery_items = []
-            for item_data in items_data:
-                try:
-                    grocery_item = ReceiptItem(
-                        name=item_data.get("name", "Unknown"),
-                        price=float(item_data.get("price", 0.0)),
-                        category=item_data.get("category")
-                    )
-                    grocery_items.append(grocery_item)
-                except Exception as e:
-                    logger.warning(f"Failed to parse item {item_data}: {e}")
-                    continue
-            
-            return grocery_items
-            
-        except Exception as e:
-            logger.warning(f"LLM item extraction failed: {e}")
-            return []
+        return ''
     
     def parse_receipt(self, pdf_path: Path) -> Dict[str, Any]:
         """
         Parse a receipt PDF and extract all relevant information.
-        Returns a dictionary with merchant, amount, date, and items.
+        Returns a dictionary with merchant, amount, date, and description.
         """
         text = self.extract_text(pdf_path)
         
-        transaction_type, merchant_name = self.detect_merchant(text)
+        merchant_type, merchant_name = self.detect_merchant(text)
         amount = self.extract_amount(text)
         date = self.extract_date(text)
+        items_desc = self.extract_items_description(text, merchant_type)
         
-        # Extract items (uses LLM if enabled)
-        items = self.extract_items(text)
-        
-        # Build description from items if available
-        if items:
-            item_names = [item.name for item in items[:3]]
-            items_desc = ', '.join(item_names)
-            full_description = f"{merchant_name} {transaction_type} ({items_desc})"
+        # Build full description
+        if items_desc:
+            full_description = f"{merchant_name} ({items_desc})"
         else:
-            items_desc = ""
             full_description = merchant_name
-
-        # Log full description for debugging
-        logger.debug(f"Full description: {full_description}")
         
-        """
-        TODO: Add support for order_id extraction
-        walmart example: 600000081236542
-        amazon example: 701-3765924-2833010
-
-        we should not imply merchant_type
-        """
         return {
-            'order_id': None,
+            'merchant_type': merchant_type,
             'merchant_name': merchant_name,
-            'transaction_type': transaction_type,
-            'summary': items_desc,
-            'items': items,  # Now returns List[ReceiptItem] instead of list of strings
+            'description': full_description,
             'amount': amount,
             'date': date,
             'raw_text': text[:500],  # First 500 chars for debugging

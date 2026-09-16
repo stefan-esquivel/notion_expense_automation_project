@@ -6,7 +6,7 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime
 from pathlib import Path
-from src.services.pdf_extractor import PDFExtractor
+from src.pdf_extractor import PDFExtractor
 
 
 @pytest.fixture
@@ -49,11 +49,11 @@ class TestPDFExtractor:
         result = extractor.parse_receipt(pdf_path)
         
         assert result is not None
+        assert 'merchant_type' in result
         assert 'merchant_name' in result
         assert 'amount' in result
         assert 'date' in result
-        assert 'summary' in result
-        assert 'items' in result
+        assert 'description' in result
     
     def test_extract_date_yyyy_mm_dd_format(self, extractor):
         """Test date extraction from YYYY-MM-DD format"""
@@ -138,18 +138,18 @@ class TestPDFExtractor:
     def test_detect_merchant_walmart(self, extractor):
         """Test Walmart merchant detection"""
         text = "Order details - Walmart.ca"
-        transaction_type, merchant_name = extractor.detect_merchant(text)
-
-        assert transaction_type == 'Order'
-        assert merchant_name == 'Walmart'
-
+        merchant_type, merchant_name = extractor.detect_merchant(text)
+        
+        assert merchant_type == 'walmart'
+        assert merchant_name == 'Walmart Order'
+    
     def test_detect_merchant_amazon(self, extractor):
         """Test Amazon merchant detection"""
         text = "Amazon.com Order Receipt"
-        transaction_type, merchant_name = extractor.detect_merchant(text)
-
-        assert transaction_type == 'Order'
-        assert merchant_name == 'Amazon'
+        merchant_type, merchant_name = extractor.detect_merchant(text)
+        
+        assert merchant_type == 'amazon'
+        assert merchant_name == 'Amazon Order'
     
     def test_detect_merchant_unknown(self, extractor):
         """Test unknown merchant detection"""
@@ -162,86 +162,51 @@ class TestPDFExtractor:
     def test_extract_items_description_walmart(self, extractor):
         """Test item description extraction for Walmart"""
         text = "Chicken Breast\nBeef Ground\nSalmon Fillet"
-        items = extractor.extract_items(text)
+        description = extractor.extract_items_description(text, 'walmart')
         
-        # When LLM is disabled (default), should return empty list
-        assert isinstance(items, list)
-        assert len(items) == 0
+        assert 'Chicken' in description or 'Beef' in description or 'Salmon' in description
     
-    def test_extract_items_with_llm_enabled(self):
-        """Test extracting items when LLM is enabled"""
-        from unittest.mock import Mock, patch
+    def test_extract_items_description_amazon(self, extractor):
+        """Test item description extraction for Amazon"""
+        text = "Kitchen Scale\nBaking Tray\nLED Bulbs"
+        description = extractor.extract_items_description(text, 'amazon')
         
-        extractor = PDFExtractor(use_llm_for_items=True)
-        text = "Amazon Order\nBaking Sheet Set $25.00\nKitchen Towels $10.00"
-        
-        # Mock the LLM client
-        with patch.object(extractor, 'llm_client', None):
-            with patch('src.services.pdf_extractor.ReceiptLLMClient') as mock_llm_class:
-                mock_llm = Mock()
-                mock_llm.extract_items.return_value = {
-                    "items": [
-                        {"name": "Baking Sheet Set", "price": 25.00, "category": "Kitchen"},
-                        {"name": "Kitchen Towels", "price": 10.00, "category": "Kitchen"}
-                    ]
-                }
-                mock_llm_class.return_value = mock_llm
-                
-                items = extractor.extract_items(text)
-                
-                assert isinstance(items, list)
-                assert len(items) == 2
+        assert 'Scale' in description or 'Tray' in description or 'Bulbs' in description
     
-    def test_extract_items_llm_failure(self):
-        """Test extracting items when LLM fails"""
-        from unittest.mock import Mock, patch
+    def test_extract_items_description_no_match(self, extractor):
+        """Test item description when no items are found"""
+        text = "Random text with no items"
+        description = extractor.extract_items_description(text, 'walmart')
         
-        extractor = PDFExtractor(use_llm_for_items=True)
-        text = "Some text"
-        
-        with patch.object(extractor, 'llm_client', None):
-            with patch('src.services.pdf_extractor.ReceiptLLMClient') as mock_llm_class:
-                mock_llm = Mock()
-                mock_llm.extract_items.side_effect = Exception("LLM error")
-                mock_llm_class.return_value = mock_llm
-                
-                items = extractor.extract_items(text)
-                
-                # Should return empty list on error
-                assert isinstance(items, list)
-                assert len(items) == 0
+        assert description == ''
     
     def test_parse_receipt_walmart_pdf(self, extractor, fixtures_dir):
         """Test parsing complete Walmart receipt PDF"""
         pdf_path = fixtures_dir / "pdfs" / "2026-03-04_Walmart_Order_Meatballs_$80.59.pdf"
         result = extractor.parse_receipt(pdf_path)
         
-        assert result['merchant_name'] == 'Walmart'
-        assert result['transaction_type'] == 'Order'
+        assert result['merchant_type'] == 'walmart'
+        assert result['merchant_name'] == 'Walmart Order'
         assert result['amount'] == 80.59
         assert result['date'] is not None
         assert result['date'].year == 2026
         assert result['date'].month == 3
         assert result['date'].day == 4
         assert result['pdf_filename'] == "2026-03-04_Walmart_Order_Meatballs_$80.59.pdf"
-        assert 'summary' in result
-        assert 'items' in result
     
     def test_parse_receipt_amazon_pdf(self, extractor, fixtures_dir):
         """Test parsing complete Amazon receipt PDF"""
         pdf_path = fixtures_dir / "pdfs" / "2026-03-07_Amazon_Order_Baking_Sheets_$49.60.pdf"
         result = extractor.parse_receipt(pdf_path)
         
-        assert result['merchant_name'] == 'Amazon'
-        assert result['transaction_type'] == 'Order'
+        assert result['merchant_type'] == 'amazon'
+        assert result['merchant_name'] == 'Amazon Order'
         assert result['amount'] == 49.60
         assert result['date'] is not None
         assert result['date'].year == 2026
         assert result['date'].month == 3
         assert result['date'].day == 7
         assert result['pdf_filename'] == "2026-03-07_Amazon_Order_Baking_Sheets_$49.60.pdf"
-        assert 'summary' in result
-        assert 'items' in result
     
     def test_date_extraction_bug_fix(self, extractor):
         """Test that the date extraction bug is fixed (issue #1)"""

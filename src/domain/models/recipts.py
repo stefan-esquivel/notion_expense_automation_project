@@ -2,7 +2,7 @@
 from uuid import UUID
 from typing import List, Optional
 from pydantic import BaseModel, Field
-from domain.models.grocery import ReceiptItem
+from domain.models.receipt_item import ReceiptItem
 
 
 class Receipt(BaseModel):
@@ -28,6 +28,11 @@ class Receipt(BaseModel):
         description="Raw vendor/merchant name as extracted from PDF (may be messy, e.g., 'WALMART SUPERCENTER #1234')",
         min_length=1
     )
+
+    transaction_type: str = Field(
+        description="Raw type of receipt expense (e.g., 'Bill', 'Order', 'Misc')",
+        min_length=1
+    )
     
     date: str = Field(
         description="Raw date string from receipt (format may vary, e.g., '2026-03-15', 'Mar 15, 2026', '03/15/2026')"
@@ -43,3 +48,25 @@ class Receipt(BaseModel):
         gt=0,
         examples=[92.01, 49.60, 150.00]
     )
+
+
+REQUIRED_RECEIPT_FIELDS: List[str] = ["vendor", "date", "total"]
+
+
+def get_missing_required_fields(receipt: "Receipt") -> List[str]:
+    """Return the names of required Receipt fields that are missing or empty.
+
+    Single source of truth for "field presence" shared by scan_node
+    (pre-enrichment gate) and validate_node (post-enrichment safety net),
+    so the two phases never disagree about what "required" means.
+    """
+    missing: List[str] = []
+
+    if not receipt.vendor or receipt.vendor.strip() == "":
+        missing.append("vendor")
+    if not receipt.date or receipt.date.strip() == "":
+        missing.append("date")
+    if receipt.total is None:
+        missing.append("total")
+
+    return missing

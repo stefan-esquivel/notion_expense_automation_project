@@ -6,7 +6,7 @@ from typing import List, Optional, Tuple
 from workflows.langgraph.state import ReceiptWorkflowState
 from domain.enums import WorkflowStatus
 from domain.models.workflow import ValidationResult
-from domain.models.recipts import Receipt, ReceiptItem
+from domain.models.recipts import Receipt, ReceiptItem, get_missing_required_fields
 from domain.models.enrichment import EnrichedReceipt
 from logger import get_logger
 
@@ -25,25 +25,29 @@ CONFIDENCE_OLD_DATE = 0.8
 CONFIDENCE_TOTAL_MISMATCH = 0.85
 
 
+_REQUIRED_FIELD_MESSAGES = {
+    "vendor": "Missing merchant name",
+    "date": "Missing transaction date",
+    "total": "Missing total amount",
+}
+
+
 def _validate_required_fields(receipt: Receipt) -> Tuple[List[str], float]:
     """Validate required fields are present and non-empty.
-    
+
+    Delegates the actual presence check to get_missing_required_fields
+    (shared with scan_node) so "required" is defined in exactly one place.
+
     Args:
         receipt: Receipt object to validate
-        
+
     Returns:
         Tuple of (errors list, confidence score)
     """
-    errors = []
+    missing = get_missing_required_fields(receipt)
+    errors = [_REQUIRED_FIELD_MESSAGES[field] for field in missing]
     confidence = 1.0
-    
-    if not receipt.vendor or receipt.vendor.strip() == "":
-        errors.append("Missing merchant name")
-    if not receipt.date or receipt.date.strip() == "":
-        errors.append("Missing transaction date")
-    if receipt.total is None:
-        errors.append("Missing total amount")
-    
+
     return errors, confidence
 
 

@@ -14,26 +14,20 @@ from logger import get_logger
 
 logger = get_logger(__name__)
 
+_MERCHANT_NAME_SUFFIXES = ("Order", "Bill", "Payment", "Premium", "Groceries", "Charge")
 
-def _extract_base_merchant_name(vendor: str) -> str:
+
+def _extract_base_merchant_name(name: str) -> str:
+    """Strip a trailing transaction-type/plan word from a merchant name.
+
+    Given a combined string like "Amazon Order" or "YouTube Premium" (a
+    vendor name immediately followed by its transaction type), returns just
+    the base merchant name ("Amazon", "YouTube").
     """
-    Extract base merchant name from vendor string.
-    Examples:
-        "Amazon Order" -> "Amazon"
-        "Walmart Order" -> "Walmart"
-        "Electrical Bill" -> "Electrical"
-        "Netflix" -> "Netflix"
-    """
-    # Common suffixes to remove
-    suffixes = [' Order', ' Bill', ' Payment', ' Groceries', ' Premium']
-    
-    base_name = vendor
-    for suffix in suffixes:
-        if vendor.endswith(suffix):
-            base_name = vendor[:-len(suffix)]
-            break
-    
-    return base_name
+    parts = name.strip().split()
+    if len(parts) > 1 and parts[-1] in _MERCHANT_NAME_SUFFIXES:
+        return " ".join(parts[:-1])
+    return name.strip()
 
 
 def review_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
@@ -72,22 +66,34 @@ def review_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
         workflow_input = state.get('workflow_input')
         pdf_filename = workflow_input.file_path if workflow_input else 'Unknown'
         
-        # Extract base merchant name (e.g., "Amazon" from "Amazon Order")
-        base_merchant_name = _extract_base_merchant_name(receipt.vendor)
-        
         # Combine vendor and summary into merchant description format: "Vendor (Summary)"
         merchant_description = receipt.vendor
         if receipt.summary:
-            merchant_description = f"{receipt.vendor} ({receipt.summary})"
+            merchant_description = f"{receipt.vendor} {receipt.transaction_type} ({receipt.summary})"
         
         receipt_info = {
-            'merchant_name': base_merchant_name,
+            'merchant_name': receipt.vendor,
             'description': merchant_description,
             'amount': receipt.total,
             'date': datetime.fromisoformat(receipt.date) if receipt.date else datetime.now(),
             'pdf_filename': pdf_filename
         }
         
+        # Surface what augment auto-filled and what's still missing, so the
+        # user can overwrite/complete it in the edit step that follows.
+        augment_results = state.get("augment_results")
+        if augment_results and (augment_results.filled_fields or augment_results.still_missing):
+            field_values = {
+                'vendor': receipt.vendor,
+                'date': receipt.date,
+                'total': receipt.total
+            }
+            ui.display_scan_augment_summary(
+                filled_fields=augment_results.filled_fields,
+                still_missing=augment_results.still_missing,
+                field_values=field_values
+            )
+
         # Use UI to review and edit
         updated_receipt_info = ui.review_and_edit(receipt_info)
         
@@ -112,7 +118,7 @@ def review_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
             # Compare against the combined merchant_description format
             original_description = receipt.vendor
             if receipt.summary:
-                original_description = f"{receipt.vendor} ({receipt.summary})"
+                original_description = f"{receipt.vendor} {receipt.transaction_type} ({receipt.summary})"
             
             if updated_receipt_info['description'] != original_description:
                 merchant_override = updated_receipt_info['description']
@@ -220,7 +226,14 @@ def review_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
         ui.display_final_preview(expense_data, split_data)
         
         # Confirm before sending to Notion
-        ui.confirm_send_to_notion()
+        user_confirmed = ui.confirm_send_to_notion()
+        
+        if not user_confirmed:
+            # User declined to send to Notion
+            state["status"] = WorkflowStatus.FAILED
+            state["failure_reason"] = "User declined to send data to Notion"
+            logger.info(f"\n\n❌ User declined to send data to Notion")
+            return state
         
         # Store in state
         state["review_data"] = review_data

@@ -66,6 +66,7 @@ def extract_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
         receipt = Receipt(
             recipt_id=extracted_data["order_id"],
             vendor=extracted_data["merchant_name"],
+            transaction_type=extracted_data["transaction_type"],
             summary=extracted_data["summary"],
             date=extracted_data["date"].isoformat() if extracted_data["date"] else "",
             items=extracted_data["items"],
@@ -75,7 +76,7 @@ def extract_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
         # Store receipt in state
         state["receipt"] = receipt
         
-        logger.info(f"✓ Extraction complete: {receipt.vendor} - ${receipt.total:.2f}")
+        logger.info(f"✓ Extraction complete: {receipt.vendor} {receipt.transaction_type} - ${receipt.total:.2f}")
         
         return state
         

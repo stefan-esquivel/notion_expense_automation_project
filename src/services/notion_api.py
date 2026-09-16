@@ -5,12 +5,20 @@ from httpx._models import Response
 from datetime import datetime
 from typing import Dict, Any, Optional
 from pathlib import Path
+import time
 import httpx
 from notion_client import Client
 from notion_client.errors import APIResponseError
 from config import Config
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 NOTION_VERSION = "2025-09-03"
+
+# File upload polling configuration
+FILE_UPLOAD_POLL_MAX_ATTEMPTS = 10
+FILE_UPLOAD_POLL_INTERVAL = 0.5
 
 class NotionExpenseClient:
     """Handle all Notion API operations for expense tracking."""
@@ -45,7 +53,7 @@ class NotionExpenseClient:
             user = self.client.users.retrieve(user_id=user_id)
             return user.get("name", user_id)
         except Exception as e:
-            print(f"Warning: Failed to fetch username for user ID {user_id}: {e}")
+            logger.warning(f"Failed to fetch username for user ID {user_id}: {e}")
             # Fallback to checking local map
             for name, uid in self.user_id_map.items():
                 if uid == user_id:
@@ -104,8 +112,8 @@ class NotionExpenseClient:
                 # Optional: verify status is uploaded (it should be for single_part)
                 if send_obj.get("status") != "uploaded":
                     # Defensive polling (usually unnecessary for single_part)
-                    for _ in range(10):
-                        time.sleep(0.5)
+                    for _ in range(FILE_UPLOAD_POLL_MAX_ATTEMPTS):
+                        time.sleep(FILE_UPLOAD_POLL_INTERVAL)
                         r: Response = client.get(
                             f"https://api.notion.com/v1/file_uploads/{file_upload_id}",
                             headers=headers,
@@ -119,7 +127,7 @@ class NotionExpenseClient:
                 return file_upload_id
 
         except Exception as e:
-            print(f"Warning: Failed to upload file to Notion: {e}")
+            logger.warning(f"Failed to upload file to Notion: {e}")
             return None
     
     def create_expense_entry(
@@ -286,7 +294,7 @@ class NotionExpenseClient:
         except (APIResponseError, KeyError) as e:
             if critical:
                 raise Exception(f"Failed to link source page {source_page_id} to target page {target_page_id}: {e}")
-            print(f"Warning: Failed to link source page {source_page_id} to target page {target_page_id}: {e}")
+            logger.warning(f"Failed to link source page {source_page_id} to target page {target_page_id}: {e}")
     
     def generate_split_title(
         self,
@@ -350,6 +358,6 @@ class NotionExpenseClient:
             self.client.pages.retrieve(page_id=self.balance_page_id)
             return True
         except APIResponseError as e:
-            print(f"Notion API connection test failed: {e}")
+            logger.error(f"Notion API connection test failed: {e}")
             return False
 

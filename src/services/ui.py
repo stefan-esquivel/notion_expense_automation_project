@@ -1,6 +1,6 @@
 """User interface module for interactive prompts and displays."""
 from datetime import datetime
-from typing import Dict, Any, Optional, List
+from typing import TYPE_CHECKING, Dict, Any, Optional, List
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -8,8 +8,16 @@ from rich.prompt import Prompt, Confirm
 import inquirer
 from config import Config
 
+if TYPE_CHECKING:
+    from domain.models.workflow import ValidationIssue
+    from domain.models.recipts import Receipt
+
 
 console = Console()
+
+# Returned by prompt_fix_red_issue when the user chooses to keep the current
+# value and override the RED error (downgrades it to an acknowledged YELLOW).
+OVERRIDE_SENTINEL = "__OVERRIDE__"
 
 
 class ExpenseUI:
@@ -53,39 +61,197 @@ class ExpenseUI:
         console.print(table)
         console.print("\n")
     
-    def display_scan_augment_summary(
+    def display_validation_issues(
         self,
-        filled_fields: Dict[str, str],
-        still_missing: List[str],
-        field_values: Dict[str, Any]
-    ):
-        """Display which fields augment auto-filled and which are still missing.
+        red_issues: "List[ValidationIssue]",
+        yellow_issues: "List[ValidationIssue]",
+    ) -> None:
+        """Display a colour-coded panel of RED (blocking) and YELLOW (advisory) issues.
 
-        Args:
-            filled_fields: Maps field name -> method used to auto-fill it
-            still_missing: Field names still missing after augment ran
-            field_values: Maps field name -> current value, for display
+        Called at the top of every review pass so the user always sees the
+        current state before being asked to fix or acknowledge anything.
         """
-        if not filled_fields and not still_missing:
+        if not red_issues and not yellow_issues:
+            console.print("\n[bold green]✅ All validation checks passed — receipt is GREEN[/bold green]\n")
             return
 
-        if filled_fields:
-            table = Table(title="🔧 Auto-Filled by Augment (review and overwrite if wrong)", show_header=True)
-            table.add_column("Field", style="cyan", width=20)
-            table.add_column("Value", style="green")
-            table.add_column("How", style="magenta")
+        lines = []
+        if red_issues:
+            lines.append("[bold red]🔴 BLOCKING — must be fixed before commit:[/bold red]")
+            for issue in red_issues:
+                field_tag = f" [dim](field: {issue.field})[/dim]" if issue.field else ""
+                lines.append(f"  [red]● {issue.message}[/red]{field_tag}")
+        if yellow_issues:
+            if lines:
+                lines.append("")
+            lines.append("[bold yellow]🟡 ADVISORY — must be acknowledged before commit:[/bold yellow]")
+            for issue in yellow_issues:
+                field_tag = f" [dim](field: {issue.field})[/dim]" if issue.field else ""
+                lines.append(f"  [yellow]● {issue.message}[/yellow]{field_tag}")
 
-            for field, method in filled_fields.items():
-                table.add_row(field, str(field_values.get(field, "N/A")), method)
-
-            console.print("\n")
-            console.print(table)
-
-        if still_missing:
-            console.print(
-                f"\n[bold red]⚠️  Still missing — please provide during review: "
-                f"{', '.join(still_missing)}[/bold red]\n"
+        console.print(
+            Panel(
+                "\n".join(lines),
+                title="[bold]Validation Issues[/bold]",
+                border_style="red" if red_issues else "yellow",
+                padding=(1, 2),
             )
+        )
+        console.print()
+
+    def prompt_fix_red_issue(
+        self,
+        issue: "ValidationIssue",
+        receipt: "Receipt",
+    ) -> Optional[str]:
+        """Prompt the user to provide a corrected value for a RED issue.
+
+        Returns:
+            str  – the corrected value to apply to the receipt.
+            ``OVERRIDE_SENTINEL`` – the user chose to keep the current value
+                and override the error (converts the RED to an acknowledged YELLOW).
+            None – the user cancelled (KeyboardInterrupt).
+
+        The caller is responsible for applying the value to the receipt.
+        """
+        console.print(f"[bold red]🔴 Fix required:[/bold red] {issue.message}")
+
+        if issue.field == "date":
+            current = receipt.date or ""
+            try:
+                new_val = Prompt.ask(
+                    "  Enter corrected date (YYYY-MM-DD), or press Enter to override with a warning",
+                    default=current,
+                )
+            except KeyboardInterrupt:
+                return None
+            # User left the value unchanged — offer to override rather than fix
+            if new_val == current:
+                try:
+                    confirmed = Confirm.ask(
+                        "  ⚠️  Keep the current value and proceed with a warning?",
+                        default=False,
+                    )
+                except KeyboardInterrupt:
+                    return None
+                if confirmed:
+                    return OVERRIDE_SENTINEL
+                # User said no — loop back (return the unchanged value so the
+                # caller's while-loop will re-prompt)
+                return current
+            return new_val
+
+        if issue.field == "vendor":
+            current = receipt.vendor or ""
+            try:
+                new_val = Prompt.ask("  Enter corrected merchant name", default=current)
+            except KeyboardInterrupt:
+                return None
+            return new_val
+
+        if issue.field == "total":
+            current = str(receipt.total) if receipt.total else "0.0"
+            try:
+                new_val = Prompt.ask("  Enter corrected amount (number only)", default=current)
+            except KeyboardInterrupt:
+                return None
+            return new_val
+
+        # Generic fallback for any future RED field
+        try:
+            new_val = Prompt.ask(f"  Enter corrected value for '{issue.field}'")
+        except KeyboardInterrupt:
+            return None
+        return new_val
+
+    def prompt_acknowledge_yellow(
+        self,
+        issue: "ValidationIssue",
+    ) -> Optional[bool]:
+        """Ask the user to acknowledge a YELLOW advisory issue.
+
+        Returns True if acknowledged, False if they want to fix it instead
+        (which will cause re-validation), or None if they cancelled.
+        """
+        console.print(f"[bold yellow]🟡 Advisory:[/bold yellow] {issue.message}")
+        try:
+            ack = Confirm.ask(
+                "  Acknowledge and proceed with this warning?",
+                default=True,
+            )
+        except KeyboardInterrupt:
+            return None
+        return ack
+
+    def display_scan_augment_summary(
+        self,
+        originally_missing: List[str],
+        filled_fields: Dict[str, str],
+        still_missing: List[str],
+        field_values: Dict[str, Any],
+    ) -> None:
+        """Display a narrative panel summarising the scan → augment pipeline.
+
+        Shows three sections in one panel:
+          • What scan detected as missing
+          • What augment managed to deduce automatically
+          • What is still missing and needs the user to provide it
+
+        Args:
+            originally_missing: Fields scan flagged as missing before augment ran.
+            filled_fields:      Maps field name → method used to auto-fill it.
+            still_missing:      Fields augment could not fill; user must provide.
+            field_values:       Maps field name → current value on the receipt.
+        """
+        lines: List[str] = []
+
+        # ── Section 1: what scan found ──────────────────────────────────
+        if originally_missing:
+            lines.append("[bold cyan]🔎 Scan detected missing fields:[/bold cyan]")
+            for field in originally_missing:
+                lines.append(f"  [cyan]● {field}[/cyan]")
+        else:
+            lines.append("[bold green]🔎 Scan found all required fields present[/bold green]")
+
+        lines.append("")
+
+        # ── Section 2: what augment deduced ─────────────────────────────
+        if filled_fields:
+            lines.append("[bold green]✅ Augment successfully deduced:[/bold green]")
+            for field, method in filled_fields.items():
+                value = field_values.get(field, "N/A")
+                friendly_method = "LLM extraction" if method == "llm_extraction" else method
+                lines.append(
+                    f"  [green]● {field}[/green]"
+                    f"  →  [bold]{value}[/bold]"
+                    f"  [dim](via {friendly_method})[/dim]"
+                )
+            lines.append(
+                "\n[dim italic]  These values were deduced automatically — "
+                "please verify and correct them below if wrong.[/dim italic]"
+            )
+        elif originally_missing:
+            lines.append("[yellow]⚠️  Augment could not deduce any missing fields automatically.[/yellow]")
+
+        # ── Section 3: still missing ─────────────────────────────────────
+        if still_missing:
+            lines.append("")
+            lines.append("[bold red]❌ Still missing — you must provide these during review:[/bold red]")
+            for field in still_missing:
+                lines.append(f"  [red]● {field}[/red]")
+
+        # Choose border colour: red if anything is still missing, green if all resolved
+        border = "red" if still_missing else ("green" if filled_fields else "cyan")
+
+        console.print(
+            Panel(
+                "\n".join(lines),
+                title="[bold]Scan & Augment Summary[/bold]",
+                border_style=border,
+                padding=(1, 2),
+            )
+        )
+        console.print()
 
     def review_and_edit(self, receipt_info: Dict[str, Any]) -> Dict[str, Any]:
         """

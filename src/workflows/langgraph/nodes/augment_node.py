@@ -46,6 +46,7 @@ def augment_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
         if not missing_fields:
             logger.info("✓ No missing fields to augment")
             state["augment_results"] = AugmentResults(filled_fields={}, still_missing=[])
+            state["status"] = WorkflowStatus.ENRICHING
             return state
 
         logger.info(f"🔧 Attempting to auto-fill missing fields: {', '.join(missing_fields)}")
@@ -83,6 +84,7 @@ def augment_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
         if still_missing:
             logger.info(f"⚠️  Still missing after augment: {', '.join(still_missing)}")
 
+        state["status"] = WorkflowStatus.ENRICHING
         return state
 
     except Exception as e:

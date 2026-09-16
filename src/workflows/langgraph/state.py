@@ -1,4 +1,4 @@
-from typing import TypedDict, Optional
+from typing import TypedDict, Optional, Set
 from datetime import datetime
 
 from domain.enums import WorkflowStatus
@@ -40,7 +40,10 @@ class ReceiptWorkflowState(TypedDict):
     
     # ===== VALIDATION =====
     validation_result: Optional[ValidationResult]  # Structured validation results with errors, warnings, and confidence
-    
+
+    # Keys of YELLOW issues the user has explicitly acknowledged across loop iterations
+    acknowledged_warnings: Set[str]
+
     # ===== REVIEW =====
     review_data: Optional[ReviewData]  # Structured review data (paid_by, corrections, approval status, timestamp)
     

@@ -32,6 +32,18 @@ class WorkflowStatus(Enum):
     FAILED = "failed"            # Error occurred
 
 
+class ValidationSeverity(Enum):
+    """Severity tier for a validation issue.
+
+    RED    – blocking: commit is gated until the user fixes the value.
+    YELLOW – advisory: user must acknowledge before the loop exits.
+    GREEN  – no issue (used as the "all-clear" sentinel).
+    """
+    RED = "red"
+    YELLOW = "yellow"
+    GREEN = "green"
+
+
 class MerchantCategory(Enum):
     """Categories of merchants for expense classification."""
     GROCERY = "grocery"

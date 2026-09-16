@@ -58,8 +58,8 @@ class TestExtractNode:
             'summary': 'Groceries',
             'date': datetime(2026, 5, 8),
             'items': [
-                ReceiptItem(name='Milk', price=4.99, quantity=1),
-                ReceiptItem(name='Bread', price=3.50, quantity=2)
+                ReceiptItem(name='Milk', price=4.99),
+                ReceiptItem(name='Bread', price=3.50)
             ],
             'amount': 11.99
         }

@@ -54,7 +54,7 @@ def extract_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
         # Extract data from PDF
         logger.info(f"📄 Extracting data from: {file_path.name}")
         logger.debug(f"Using PDFExtractor with LLM enabled")
-        extracted_data = extractor.parse_receipt(file_path)
+        extracted_data = extractor.parse_receipt(file_path, raw_text=workflow_input.raw_text)
         logger.debug(f"Extracted {len(extracted_data.get('items', []))} items")
         
         # Convert to Receipt model

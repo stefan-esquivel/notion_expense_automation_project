@@ -2,8 +2,9 @@
 
 import json
 import os
+import time
 from typing import Optional, Dict, Any
-from openai import OpenAI
+from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI, RateLimitError
 
 # Import config to ensure .env is loaded
 from config import Config
@@ -74,8 +75,18 @@ class ReceiptLLMClient:
         if response_format:
             kwargs["response_format"] = response_format
         
-        response = self.client.chat.completions.create(**kwargs)
-        return response.choices[0].message.content
+        for attempt in range(3):
+            try:
+                response = self.client.chat.completions.create(**kwargs)
+                return response.choices[0].message.content
+            except (APIConnectionError, APITimeoutError, RateLimitError):
+                if attempt == 2:
+                    raise
+            except APIStatusError as error:
+                if error.status_code < 500 or attempt == 2:
+                    raise
+
+            time.sleep(2 ** attempt)
     
     def extract_receipt(self, raw_text: str) -> Dict[str, Any]:
         """

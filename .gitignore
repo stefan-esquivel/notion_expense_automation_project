@@ -55,7 +55,3 @@ htmlcov/
 /bugs
 .env.prod
 .env.qa
-
-# QA Environment state
-scripts/.qa_environment_state.json
-receipts/qa_processed/

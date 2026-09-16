@@ -34,12 +34,6 @@ class TestIngestNode:
             yield mock
     
     @pytest.fixture
-    def mock_pdf_extractor(self):
-        """Mock PDFExtractor."""
-        with patch('workflows.langgraph.nodes.ingest_node.PDFExtractor') as mock:
-            yield mock
-    
-    @pytest.fixture
     def valid_state(self, tmp_path):
         """Create a valid state with a real temporary file."""
         # Create a temporary PDF file
@@ -62,13 +56,8 @@ class TestIngestNode:
             failure_reason=None
         )
     
-    def test_ingest_node_success(self, valid_state, mock_config, mock_ui, mock_pdf_extractor):
+    def test_ingest_node_success(self, valid_state, mock_config, mock_ui):
         """Test successful ingestion of a receipt."""
-        # Setup mocks
-        mock_extractor_instance = Mock()
-        mock_extractor_instance.extract_text.return_value = "Sample receipt text content"
-        mock_pdf_extractor.return_value = mock_extractor_instance
-        
         mock_ui_instance = Mock()
         mock_ui.return_value = mock_ui_instance
         
@@ -77,7 +66,7 @@ class TestIngestNode:
         
         # Assertions
         assert result["status"] == WorkflowStatus.INGESTING
-        assert result["workflow_input"].raw_text == "Sample receipt text content"
+        assert result["workflow_input"].raw_text == "placeholder text"
         assert result["failure_reason"] is None
         
         # Verify UI was initialized with correct names
@@ -88,10 +77,6 @@ class TestIngestNode:
         
         # Verify display_processing was called
         mock_ui_instance.display_processing.assert_called_once_with(valid_state["workflow_input"].file_path)
-        
-        # Verify PDFExtractor was used
-        mock_pdf_extractor.assert_called_once()
-        mock_extractor_instance.extract_text.assert_called_once()
     
     def test_ingest_node_no_workflow_input(self, mock_config, mock_ui):
         """Test failure when no workflow input is provided."""
@@ -161,32 +146,8 @@ class TestIngestNode:
         assert "File does not exist" in result["failure_reason"]
         assert "/nonexistent/path/receipt.pdf" in result["failure_reason"]
     
-    def test_ingest_node_pdf_extraction_error(self, valid_state, mock_config, mock_ui, mock_pdf_extractor):
-        """Test failure when PDF extraction raises an exception."""
-        # Setup mocks
-        mock_extractor_instance = Mock()
-        mock_extractor_instance.extract_text.side_effect = Exception("PDF is corrupted")
-        mock_pdf_extractor.return_value = mock_extractor_instance
-        
-        mock_ui_instance = Mock()
-        mock_ui.return_value = mock_ui_instance
-        
-        # Execute
-        result = ingest_node(valid_state)
-        
-        # Assertions
-        assert result["status"] == WorkflowStatus.FAILED
-        assert "Failed to extract text from PDF" in result["failure_reason"]
-        assert "PDF is corrupted" in result["failure_reason"]
-    
-    def test_ingest_node_updates_raw_text(self, valid_state, mock_config, mock_ui, mock_pdf_extractor):
-        """Test that raw_text is properly updated in workflow_input."""
-        # Setup mocks
-        extracted_text = "WALMART\nTotal: $50.00\nDate: 2026-05-08"
-        mock_extractor_instance = Mock()
-        mock_extractor_instance.extract_text.return_value = extracted_text
-        mock_pdf_extractor.return_value = mock_extractor_instance
-        
+    def test_ingest_node_preserves_raw_text(self, valid_state, mock_config, mock_ui):
+        """Test that raw_text populated before the graph is preserved."""
         mock_ui_instance = Mock()
         mock_ui.return_value = mock_ui_instance
         
@@ -197,16 +158,11 @@ class TestIngestNode:
         result = ingest_node(valid_state)
         
         # Assertions
-        assert result["workflow_input"].raw_text == extracted_text
+        assert result["workflow_input"].raw_text == "placeholder text"
         assert result["status"] == WorkflowStatus.INGESTING
     
-    def test_ingest_node_logs_source(self, valid_state, mock_config, mock_ui, mock_pdf_extractor):
+    def test_ingest_node_logs_source(self, valid_state, mock_config, mock_ui):
         """Test that the node logs the source of the receipt."""
-        # Setup mocks
-        mock_extractor_instance = Mock()
-        mock_extractor_instance.extract_text.return_value = "Sample text"
-        mock_pdf_extractor.return_value = mock_extractor_instance
-        
         mock_ui_instance = Mock()
         mock_ui.return_value = mock_ui_instance
         
@@ -222,7 +178,7 @@ class TestIngestNode:
             assert any("Ingesting receipt from" in str(call) for call in log_calls)
             assert any("Source:" in str(call) for call in log_calls)
     
-    def test_ingest_node_with_gmail_source(self, tmp_path, mock_config, mock_ui, mock_pdf_extractor):
+    def test_ingest_node_with_gmail_source(self, tmp_path, mock_config, mock_ui):
         """Test ingestion with GMAIL as source."""
         # Create a temporary PDF file
         test_file = tmp_path / "gmail_receipt.pdf"
@@ -244,11 +200,6 @@ class TestIngestNode:
             failure_reason=None
         )
         
-        # Setup mocks
-        mock_extractor_instance = Mock()
-        mock_extractor_instance.extract_text.return_value = "Gmail receipt text"
-        mock_pdf_extractor.return_value = mock_extractor_instance
-        
         mock_ui_instance = Mock()
         mock_ui.return_value = mock_ui_instance
         
@@ -258,4 +209,4 @@ class TestIngestNode:
         # Assertions
         assert result["status"] == WorkflowStatus.INGESTING
         assert result["workflow_input"].source == Sources.GMAIL
-        assert result["workflow_input"].raw_text == "Gmail receipt text"
+        assert result["workflow_input"].raw_text == "placeholder text"

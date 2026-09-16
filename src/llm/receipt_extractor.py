@@ -1,5 +1,6 @@
 """High-level receipt extraction functions using LLM client."""
 
+import re
 from typing import Dict, Any, Optional
 from datetime import datetime
 
@@ -33,13 +34,21 @@ def llm_extract_receipt(raw_text: str, client: Optional[ReceiptLLMClient] = None
     # Convert to Receipt model
     from uuid import uuid4
     
+    total_val = extracted.get("total_amount")
+    try:
+        total = float(total_val) if total_val not in (None, "") else None
+        if total is not None and total <= 0:
+            total = None
+    except (ValueError, TypeError):
+        total = None
+
     receipt = Receipt(
         recipt_id=str(uuid4()),  # Convert UUID to string
         vendor=extracted.get("merchant_name", "Unknown"),
-        transaction_type=extracted.get("transaction_type", "Order"),
+        transaction_type=extracted.get("transaction_type", "Purchase"),
         date=extracted.get("date", ""),
         items=extracted.get("items", []),
-        total=float(extracted.get("total_amount", 0.0))
+        total=total
     )
     
     return receipt
@@ -119,6 +128,60 @@ def llm_enrich_receipt(
     )
     
     return enriched
+
+
+# ---------------------------------------------------------------------------
+# Keyword-based fallback (used when LLM is unavailable)
+# ---------------------------------------------------------------------------
+
+# Maps a regex pattern to a (merchant_category, transaction_type) tuple.
+# Ordered most-specific → least-specific so the first match wins.
+_KEYWORD_CATEGORY_MAP: list = [
+    (r'amazon',                     "retail"),
+    (r'walmart',                    "grocery"),
+    (r'longo',                      "grocery"),
+    (r'hydro|electric|electricity|power|utility', "utility"),
+    (r'netflix',                    "subscription"),
+    (r'youtube|yt\b',               "subscription"),
+    (r'spotify',                    "subscription"),
+    (r'parking',                    "transportation"),
+    (r'rent\b',                     "other"),
+    (r'restaurant|bistro|cafe|pizza|sushi|burger', "restaurant"),
+    (r'pharmacy|shoppers|rexall',   "healthcare"),
+]
+
+# Confidence assigned when the fallback path is used
+FALLBACK_CONFIDENCE = 0.5
+
+
+def keyword_enrich_receipt(receipt: Receipt) -> EnrichedReceipt:
+    """Enrich a receipt using keyword matching (no LLM required).
+
+    Used as a fallback when the LLM call fails.  Always sets
+    ``confidence_score`` to ``FALLBACK_CONFIDENCE`` (0.5) so downstream
+    nodes know the categorisation is uncertain.
+
+    Args:
+        receipt: Receipt to categorise.
+
+    Returns:
+        EnrichedReceipt with keyword-matched category and confidence 0.5.
+    """
+    vendor_lower = receipt.vendor.lower()
+
+    for pattern, category in _KEYWORD_CATEGORY_MAP:
+        if re.search(pattern, vendor_lower):
+            return EnrichedReceipt(
+                merchant_category=category,
+                confidence_score=FALLBACK_CONFIDENCE,
+                notes="keyword-matching fallback (LLM unavailable)",
+            )
+
+    return EnrichedReceipt(
+        merchant_category="other",
+        confidence_score=FALLBACK_CONFIDENCE,
+        notes="keyword-matching fallback — no pattern matched",
+    )
 
 
 def llm_parse_date(

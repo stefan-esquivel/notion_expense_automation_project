@@ -4,8 +4,8 @@ from datetime import datetime
 from typing import List, Optional, Tuple
 
 from workflows.langgraph.state import ReceiptWorkflowState
-from domain.enums import WorkflowStatus
-from domain.models.workflow import ValidationResult
+from domain.enums import WorkflowStatus, ValidationSeverity
+from domain.models.workflow import ValidationResult, ValidationIssue
 from domain.models.recipts import Receipt, ReceiptItem, get_missing_required_fields
 from domain.models.enrichment import EnrichedReceipt
 from logger import get_logger
@@ -24,244 +24,228 @@ CONFIDENCE_HIGH_AMOUNT = 0.9
 CONFIDENCE_OLD_DATE = 0.8
 CONFIDENCE_TOTAL_MISMATCH = 0.85
 
-
+# Human-readable labels for required fields
 _REQUIRED_FIELD_MESSAGES = {
     "vendor": "Missing merchant name",
     "date": "Missing transaction date",
     "total": "Missing total amount",
 }
 
+UNKNOWN_MERCHANT_NAME = "Unknown Merchant"
 
-def _validate_required_fields(receipt: Receipt) -> Tuple[List[str], float]:
-    """Validate required fields are present and non-empty.
 
-    Delegates the actual presence check to get_missing_required_fields
-    (shared with scan_node) so "required" is defined in exactly one place.
-
-    Args:
-        receipt: Receipt object to validate
-
-    Returns:
-        Tuple of (errors list, confidence score)
-    """
+def _check_required_fields(receipt: Receipt) -> Tuple[List[ValidationIssue], float]:
+    """RED: required fields must be present."""
     missing = get_missing_required_fields(receipt)
-    errors = [_REQUIRED_FIELD_MESSAGES[field] for field in missing]
+    issues = [
+        ValidationIssue(
+            message=_REQUIRED_FIELD_MESSAGES[field],
+            severity=ValidationSeverity.RED,
+            field=field,
+            key=f"missing_{field}",
+        )
+        for field in missing
+    ]
+    return issues, 1.0
+
+
+def _check_amount(amount: Optional[float]) -> Tuple[List[ValidationIssue], float]:
+    """RED for non-positive amounts; YELLOW for unusually high amounts."""
+    issues: List[ValidationIssue] = []
     confidence = 1.0
 
-    return errors, confidence
-
-
-def _validate_amount(amount: Optional[float]) -> Tuple[List[str], List[str], float]:
-    """Validate amount is positive and reasonable.
-    
-    Args:
-        amount: Amount to validate
-        
-    Returns:
-        Tuple of (errors list, warnings list, confidence score)
-    """
-    errors, warnings = [], []
-    confidence = 1.0
-    
     if amount is not None:
         if amount <= 0:
-            errors.append(f"Invalid amount: ${amount:.2f} (must be positive)")
+            issues.append(ValidationIssue(
+                message=f"Invalid amount: ${amount:.2f} (must be positive)",
+                severity=ValidationSeverity.RED,
+                field="total",
+                key="invalid_amount",
+            ))
         elif amount > HIGH_AMOUNT_THRESHOLD:
-            warnings.append(f"Unusually high amount: ${amount:.2f}")
+            issues.append(ValidationIssue(
+                message=f"Unusually high amount: ${amount:.2f}",
+                severity=ValidationSeverity.YELLOW,
+                field="total",
+                key="high_amount",
+            ))
             confidence *= CONFIDENCE_HIGH_AMOUNT
-    
-    return errors, warnings, confidence
+
+    return issues, confidence
 
 
-def _validate_date(date_str: Optional[str]) -> Tuple[List[str], List[str], float]:
-    """Validate date format and reasonableness.
-    
-    Args:
-        date_str: ISO format date string to validate
-        
-    Returns:
-        Tuple of (errors list, warnings list, confidence score)
-    """
-    errors, warnings = [], []
+def _check_date(date_str: Optional[str]) -> Tuple[List[ValidationIssue], float]:
+    """RED for invalid format or future date; YELLOW for very old date."""
+    issues: List[ValidationIssue] = []
     confidence = 1.0
-    
+
     if not date_str:
-        return errors, warnings, confidence
-    
+        return issues, confidence
+
     try:
         parsed_date = datetime.fromisoformat(date_str)
         current_date = datetime.now().date()
-        
+
         if parsed_date.year < MIN_REASONABLE_YEAR:
-            warnings.append(f"Date is very old: {date_str}")
+            issues.append(ValidationIssue(
+                message=f"Date is very old: {date_str}",
+                severity=ValidationSeverity.YELLOW,
+                field="date",
+                key="old_date",
+            ))
             confidence *= CONFIDENCE_OLD_DATE
         elif parsed_date.date() > current_date:
-            errors.append(f"Date is in the future: {date_str}")
+            issues.append(ValidationIssue(
+                message=f"Date is in the future: {date_str}",
+                severity=ValidationSeverity.RED,
+                field="date",
+                key="future_date",
+            ))
     except (ValueError, TypeError):
-        errors.append(f"Invalid date format: {date_str} (expected ISO format YYYY-MM-DD)")
-    
-    return errors, warnings, confidence
+        issues.append(ValidationIssue(
+            message=f"Invalid date format: {date_str} (expected ISO format YYYY-MM-DD)",
+            severity=ValidationSeverity.RED,
+            field="date",
+            key="invalid_date_format",
+        ))
+
+    return issues, confidence
 
 
-def _validate_total_calculation(
+def _check_unknown_merchant(receipt: Receipt) -> Tuple[List[ValidationIssue], float]:
+    """YELLOW when vendor is still the default 'Unknown Merchant' placeholder."""
+    issues: List[ValidationIssue] = []
+    if receipt.vendor == UNKNOWN_MERCHANT_NAME:
+        issues.append(ValidationIssue(
+            message=(
+                "Merchant name is 'Unknown Merchant' — could not be identified automatically. "
+                "Please verify or update the merchant name during review."
+            ),
+            severity=ValidationSeverity.YELLOW,
+            field="vendor",
+            key="unknown_merchant",
+        ))
+    return issues, 1.0
+
+
+def _check_total_calculation(
     items: Optional[List[ReceiptItem]],
-    total: Optional[float]
-) -> Tuple[List[str], float]:
-    """Verify total matches sum of items within tolerance.
-    
-    Args:
-        items: List of receipt items
-        total: Total amount from receipt
-        
-    Returns:
-        Tuple of (warnings list, confidence score)
-    """
-    warnings = []
+    total: Optional[float],
+) -> Tuple[List[ValidationIssue], float]:
+    """YELLOW when sum of line items diverges from the receipt total."""
+    issues: List[ValidationIssue] = []
     confidence = 1.0
-    
+
     if not items or not total:
-        return warnings, confidence
-    
+        return issues, confidence
+
     calculated_total = sum(item.price for item in items)
     difference = abs(total - calculated_total)
     tolerance = max(total * TOTAL_MISMATCH_TOLERANCE, MIN_TOLERANCE_AMOUNT)
-    
+
     if difference > tolerance:
-        warnings.append(
-            f"Total mismatch: Receipt shows ${total:.2f}, "
-            f"items sum to ${calculated_total:.2f} (difference: ${difference:.2f})"
-        )
+        issues.append(ValidationIssue(
+            message=(
+                f"Total mismatch: receipt shows ${total:.2f}, "
+                f"items sum to ${calculated_total:.2f} (difference: ${difference:.2f})"
+            ),
+            severity=ValidationSeverity.YELLOW,
+            field="total",
+            key="total_mismatch",
+        ))
         confidence *= CONFIDENCE_TOTAL_MISMATCH
-    
-    return warnings, confidence
+
+    return issues, confidence
 
 
-def _validate_enrichment_confidence(
-    enriched: Optional[EnrichedReceipt]
-) -> Tuple[List[str], float]:
-    """Check enrichment confidence score.
-    
-    Args:
-        enriched: Enriched receipt data
-        
-    Returns:
-        Tuple of (warnings list, confidence score)
-    """
-    warnings = []
+def _check_enrichment_confidence(
+    enriched: Optional[EnrichedReceipt],
+) -> Tuple[List[ValidationIssue], float]:
+    """YELLOW when enrichment confidence is below the threshold."""
+    issues: List[ValidationIssue] = []
     confidence = 1.0
-    
+
     if enriched and enriched.confidence_score < LOW_CONFIDENCE_THRESHOLD:
-        warnings.append(f"Low enrichment confidence: {enriched.confidence_score:.2f}")
+        issues.append(ValidationIssue(
+            message=f"Low enrichment confidence: {enriched.confidence_score:.2f}",
+            severity=ValidationSeverity.YELLOW,
+            field=None,
+            key="low_enrichment_confidence",
+        ))
         confidence *= enriched.confidence_score
-    
-    return warnings, confidence
+
+    return issues, confidence
 
 
-def _log_validation_results(
-    result: ValidationResult,
-    errors: List[str],
-    warnings: List[str],
-    confidence: float
-) -> None:
-    """Log validation results with appropriate severity.
-    
-    Args:
-        result: Validation result object
-        errors: List of validation errors
-        warnings: List of validation warnings
-        confidence: Overall confidence score
-    """
-    if result.is_valid and not result.requires_review:
-        logger.info(f"✓ Validation passed (confidence: {confidence:.2f})")
-    elif result.is_valid and result.requires_review:
-        logger.info(f"⚠️  Validation passed with warnings (confidence: {confidence:.2f})")
-        for warning in warnings:
-            logger.info(f"    - {warning}")
-    else:
-        logger.warning(f"✗ Validation failed:")
-        for error in errors:
-            logger.warning(f"    - {error}")
-        if warnings:
-            logger.info(f"  Warnings:")
-            for warning in warnings:
-                logger.info(f"    - {warning}")
+def _log_validation_results(result: ValidationResult) -> None:
+    red = [i for i in result.issues if i.severity == ValidationSeverity.RED]
+    yellow = [i for i in result.issues if i.severity == ValidationSeverity.YELLOW]
+
+    if not red and not yellow:
+        logger.info(f"✓ Validation passed — all GREEN (confidence: {result.confidence_score:.2f})")
+        return
+
+    if red:
+        logger.warning(f"🔴 {len(red)} blocking issue(s):")
+        for issue in red:
+            logger.warning(f"    🔴 {issue.message}")
+
+    if yellow:
+        logger.info(f"🟡 {len(yellow)} advisory issue(s):")
+        for issue in yellow:
+            logger.info(f"    🟡 {issue.message}")
 
 
 def validate_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
-    """Validate extracted and enriched receipt data.
-    
-    Performs comprehensive validation including:
-    - Required field presence
-    - Amount validity and reasonableness
-    - Date format and temporal validity
-    - Total calculation verification
-    - Enrichment confidence assessment
-    
+    """Validate extracted and enriched receipt data with tiered severity.
+
+    Each check produces either a RED (blocking) or YELLOW (advisory) issue.
+    The graph routes back to review until is_green() returns True.
+
     Args:
         state: Current workflow state with receipt and enriched_receipt
-        
+
     Returns:
         Updated state with validation_result
     """
     state["status"] = WorkflowStatus.VALIDATING
-    
+
     try:
         receipt = state.get("receipt")
         if not receipt:
             raise ValueError("No receipt data found in state")
-        
+
         logger.info(f"🔍 Validating receipt: {receipt.vendor}")
-        
-        # Collect all validation results
-        all_errors: List[str] = []
-        all_warnings: List[str] = []
+
+        all_issues: List[ValidationIssue] = []
         confidence_score = 1.0
-        
-        # Run validation checks
-        errors, conf = _validate_required_fields(receipt)
-        all_errors.extend(errors)
-        confidence_score *= conf
-        
-        errors, warnings, conf = _validate_amount(receipt.total)
-        all_errors.extend(errors)
-        all_warnings.extend(warnings)
-        confidence_score *= conf
-        
-        errors, warnings, conf = _validate_date(receipt.date)
-        all_errors.extend(errors)
-        all_warnings.extend(warnings)
-        confidence_score *= conf
-        
-        warnings, conf = _validate_total_calculation(receipt.items, receipt.total)
-        all_warnings.extend(warnings)
-        confidence_score *= conf
-        
-        warnings, conf = _validate_enrichment_confidence(state.get("enriched_receipt"))
-        all_warnings.extend(warnings)
-        confidence_score *= conf
-        
-        # Create validation result
-        validation_result = ValidationResult(
-            is_valid=len(all_errors) == 0,
-            errors=all_errors,
-            warnings=all_warnings,
-            requires_review=True,  # Always require review for prototyping
-            confidence_score=confidence_score
+
+        for checker, args in [
+            (_check_required_fields,       (receipt,)),
+            (_check_unknown_merchant,      (receipt,)),
+            (_check_amount,                (receipt.total,)),
+            (_check_date,                  (receipt.date,)),
+            (_check_total_calculation,     (receipt.items, receipt.total)),
+            (_check_enrichment_confidence, (state.get("enriched_receipt"),)),
+        ]:
+            issues, conf = checker(*args)  # type: ignore[call-arg]
+            all_issues.extend(issues)
+            confidence_score *= conf
+
+        state["validation_result"] = ValidationResult(
+            issues=all_issues,
+            confidence_score=confidence_score,
         )
-        
-        state["validation_result"] = validation_result
-        _log_validation_results(validation_result, all_errors, all_warnings, confidence_score)
-        
+
+        _log_validation_results(state["validation_result"])
         return state
-        
+
     except ValueError as e:
-        # Handle expected validation errors
         state["status"] = WorkflowStatus.FAILED
         state["failure_reason"] = f"Validation failed: {str(e)}"
         logger.error(f"✗ Validation error: {e}")
         return state
     except Exception as e:
-        # Handle unexpected errors with full context
         state["status"] = WorkflowStatus.FAILED
         state["failure_reason"] = f"Unexpected validation error: {str(e)}"
         logger.exception(f"✗ Unexpected validation error: {e}")

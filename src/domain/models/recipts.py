@@ -43,7 +43,8 @@ class Receipt(BaseModel):
         description="List of individual items purchased (empty for non-itemized receipts)"
     )
     
-    total: float = Field(
+    total: Optional[float] = Field(
+        default=None,
         description="Total amount paid on the receipt",
         gt=0,
         examples=[92.01, 49.60, 150.00]

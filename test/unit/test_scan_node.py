@@ -26,7 +26,7 @@ class TestScanNode:
             transaction_type='Order',
             summary='Groceries',
             date='2026-05-08',
-            items=[ReceiptItem(name='Milk', price=4.99, quantity=1)],
+            items=[ReceiptItem(name='Milk', price=4.99)],
             total=11.99
         )
 

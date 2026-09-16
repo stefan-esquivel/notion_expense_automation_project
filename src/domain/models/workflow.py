@@ -1,11 +1,11 @@
 """Workflow-specific models for LangGraph state management."""
 
-from pydantic import BaseModel, Field
-from typing import Optional, List, Dict
+from pydantic import BaseModel, Field, computed_field
+from typing import Optional, List, Dict, Set
 from datetime import datetime
 from pathlib import Path
 
-from domain.enums import Sources
+from domain.enums import Sources, ValidationSeverity
 
 
 class WorkflowInput(BaseModel):
@@ -158,43 +158,85 @@ class AugmentResults(BaseModel):
     )
 
 
+class ValidationIssue(BaseModel):
+    """A single validation issue with a severity tier.
+
+    severity:
+        RED    – blocking; commit is gated until the user corrects the value.
+        YELLOW – advisory; user must acknowledge before the loop exits.
+    field:
+        Optional name of the Receipt field this issue relates to (used by
+        review_node to know which prompt to show the user).
+    key:
+        Stable identifier used to track per-issue acknowledgement across
+        validate→review loop iterations (e.g. "high_amount", "old_date").
+    """
+
+    message: str = Field(description="Human-readable description of the issue")
+    severity: ValidationSeverity = Field(description="RED (blocking) or YELLOW (advisory)")
+    field: Optional[str] = Field(
+        default=None,
+        description="Receipt field this issue relates to, e.g. 'date', 'total'"
+    )
+    key: str = Field(description="Stable key for acknowledgement tracking")
+
+
 class ValidationResult(BaseModel):
     """Results from the validation phase.
-    
-    Captures validation errors and determines if human review is required.
+
+    issues holds every RED and YELLOW finding.  When issues is empty (or
+    every YELLOW has been acknowledged and no RED remain) the receipt is
+    GREEN and commit is unlocked.
     """
-    
-    is_valid: bool = Field(
-        description="Whether the data passed all validation checks"
-    )
-    
-    errors: List[str] = Field(
+
+    issues: List[ValidationIssue] = Field(
         default_factory=list,
-        description="List of validation error messages",
-        examples=[
-            ["Missing merchant name", "Invalid date format"],
-            ["Amount is zero or negative"],
-            []
-        ]
+        description="All RED and YELLOW validation issues found"
     )
-    
-    warnings: List[str] = Field(
-        default_factory=list,
-        description="Non-critical warnings that don't block processing",
-        examples=[
-            ["Low confidence in merchant detection"],
-            ["Unusual amount for this merchant"],
-            []
-        ]
-    )
-    
-    requires_review: bool = Field(
-        description="Whether human review is required before proceeding"
-    )
-    
+
     confidence_score: float = Field(
         default=1.0,
         ge=0.0,
         le=1.0,
         description="Overall confidence in the extracted and enriched data (0.0 to 1.0)"
     )
+
+    # ------------------------------------------------------------------ #
+    # Derived helpers                                                      #
+    # ------------------------------------------------------------------ #
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def errors(self) -> List[str]:
+        """RED issue messages (backwards-compat view)."""
+        return [i.message for i in self.issues if i.severity == ValidationSeverity.RED]
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def warnings(self) -> List[str]:
+        """YELLOW issue messages (backwards-compat view)."""
+        return [i.message for i in self.issues if i.severity == ValidationSeverity.YELLOW]
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def is_valid(self) -> bool:
+        """True when there are no RED issues."""
+        return not any(i.severity == ValidationSeverity.RED for i in self.issues)
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def requires_review(self) -> bool:
+        """True whenever there is at least one issue of any severity."""
+        return len(self.issues) > 0
+
+    def is_green(self, acknowledged: Set[str]) -> bool:
+        """Return True when commit is safe to proceed.
+
+        Commit is safe when every issue is either:
+        - a YELLOW that the user has acknowledged, OR
+        - a RED that the user has explicitly overridden (key is in *acknowledged*).
+        """
+        for issue in self.issues:
+            if issue.key not in acknowledged:
+                return False
+        return True

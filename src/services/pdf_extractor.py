@@ -165,6 +165,13 @@ class PDFExtractor:
         
     #     return found_items
     
+    @staticmethod
+    def _build_summary(items: List[ReceiptItem]) -> str:
+        """Return a comma-joined summary of the first three item names, or empty string."""
+        if not items:
+            return ""
+        return ', '.join(item.name for item in items[:3])
+
     def extract_items(self, text: str) -> List[ReceiptItem]:
         """
         Extract individual items from receipt text.
@@ -228,35 +235,22 @@ class PDFExtractor:
         
         # Extract items (uses LLM if enabled)
         items = self.extract_items(text)
-        
-        # Build description from items if available
-        if items:
-            item_names = [item.name for item in items[:3]]
-            items_desc = ', '.join(item_names)
-            full_description = f"{merchant_name} {transaction_type} ({items_desc})"
-        else:
-            items_desc = ""
-            full_description = merchant_name
 
-        # Log full description for debugging
-        logger.debug(f"Full description: {full_description}")
-        
-        """
-        TODO: Add support for order_id extraction
-        walmart example: 600000081236542
-        amazon example: 701-3765924-2833010
+        summary = self._build_summary(items)
+        logger.debug(f"Full description: {merchant_name} {transaction_type} ({summary})" if summary else f"Full description: {merchant_name}")
 
-        we should not imply merchant_type
-        """
+        # TODO: Add support for order_id extraction
+        # walmart example: 600000081236542
+        # amazon example: 701-3765924-2833010
+        # we should not imply merchant_type
         return {
             'order_id': None,
             'merchant_name': merchant_name,
             'transaction_type': transaction_type,
-            'summary': items_desc,
-            'items': items,  # Now returns List[ReceiptItem] instead of list of strings
+            'summary': summary,
+            'items': items,
             'amount': amount,
             'date': date,
-            'raw_text': text[:500],  # First 500 chars for debugging
             'pdf_filename': pdf_path.name
         }
 

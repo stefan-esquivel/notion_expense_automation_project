@@ -184,6 +184,64 @@ def keyword_enrich_receipt(receipt: Receipt) -> EnrichedReceipt:
     )
 
 
+def llm_suspicious_confidence_check(
+    receipt: "Receipt",
+    enriched: "Optional[EnrichedReceipt]",
+    confidence_score: float,
+    client: Optional[ReceiptLLMClient] = None,
+) -> Optional["ValidationIssue"]:
+    """Call the LLM to explain a low confidence score and return a YELLOW issue.
+
+    Only fires when ``confidence_score`` is below the threshold AND the LLM
+    identifies a specific reason not already covered by the named checkers.
+
+    Args:
+        receipt:          The extracted receipt.
+        enriched:         The enriched receipt (may be None).
+        confidence_score: The composite confidence score from validate_node.
+        client:           Optional LLM client (creates one if not provided).
+
+    Returns:
+        A YELLOW ``ValidationIssue`` if the LLM found something suspicious,
+        or ``None`` if nothing was flagged or the LLM call fails.
+    """
+    from domain.models.workflow import ValidationIssue
+    from domain.enums import ValidationSeverity
+
+    if client is None:
+        client = ReceiptLLMClient()
+
+    try:
+        result = client.suspicious_confidence_check(
+            merchant=receipt.vendor or "",
+            date=receipt.date or "",
+            amount=receipt.total,
+            category=enriched.merchant_category if enriched else "unknown",
+            items=receipt.items,
+            notes=enriched.notes if enriched else None,
+            confidence_score=confidence_score,
+        )
+    except Exception as exc:
+        logger.warning(f"LLM suspicious-confidence check failed, skipping: {exc}")
+        return None
+
+    reasons = result.get("suspicious_reasons") or []
+    summary = result.get("summary", "").strip()
+
+    if not reasons or summary in ("", "No specific issues detected"):
+        return None
+
+    detail = "; ".join(reasons)
+    message = f"Low confidence ({confidence_score:.0%}) — {summary} ({detail})"
+
+    return ValidationIssue(
+        message=message,
+        severity=ValidationSeverity.YELLOW,
+        field=None,
+        key="suspicious_confidence",
+    )
+
+
 def llm_parse_date(
     date_text: str,
     context: str = "",

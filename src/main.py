@@ -64,56 +64,58 @@ class ExpenseAutomation:
         pdf_files = list(Config.INPUT_FOLDER.glob("*.pdf"))
         return sorted(pdf_files)
     
+    def _validate_config(self) -> None:
+        """Validate configuration, raising ValueError on failure."""
+        self.logger.info("Validating configuration")
+        Config.validate()
+
+    def _test_notion(self) -> bool:
+        """Test Notion API connectivity. Returns True if all resources are reachable."""
+        self.logger.info("Testing Notion API connection")
+        client = NotionExpenseClient(
+            Config.NOTION_API_TOKEN,
+            Config.EXPENSE_TABLE_DATABASE_ID,
+            split_db_id=Config.SPLIT_DETAILS_DATABASE_ID,
+            balance_page_id=Config.BALANCES_PAGE_ID,
+        )
+        return client.test_connection()
+
     def run(self):
         """Main application loop."""
         try:
-            # Validate configuration
-            self.logger.info("Validating configuration")
-            Config.validate()
-            
-            # Test Notion connection (create temporary client for testing)
-            self.logger.info("Testing Notion API connection")
-            test_client = NotionExpenseClient(
-                Config.NOTION_API_TOKEN,
-                Config.EXPENSE_TABLE_DATABASE_ID,
-                split_db_id=Config.SPLIT_DETAILS_DATABASE_ID,
-                balance_page_id=Config.BALANCES_PAGE_ID
-            )
-            if not test_client.test_connection():
+            self._validate_config()
+
+            if not self._test_notion():
                 self.ui.display_error("Failed to connect to Notion API. Check your credentials.")
                 return
-            
+
             # Display welcome
             self.ui.display_welcome()
-            
+
             # Scan for receipts
             pdf_files = self.scan_input_folder()
-            
+
             if not pdf_files:
                 self.ui.display_error(f"No PDF files found in {Config.INPUT_FOLDER}")
                 self.logger.info("No receipts to process")
                 return
-            
+
             self.logger.info(f"Found {len(pdf_files)} receipt(s) to process")
-            
+
             # Process each receipt
-            success_count = 0
-            for pdf_file in pdf_files:
-                if self.process_receipt(pdf_path=pdf_file):
-                    success_count += 1
-            
+            success_count = sum(
+                self.process_receipt(pdf_path=f) for f in pdf_files
+            )
+
             # Summary
             self.logger.info(f"Processed {success_count}/{len(pdf_files)} receipts successfully")
-            
+
         except ValueError as e:
             self.ui.display_error(f"Configuration error: {e}")
             self.logger.error(f"Configuration error: {e}")
         except KeyboardInterrupt:
             self.logger.info("Application interrupted by user")
             self.ui.display_error("Application interrupted")
-        except Exception as e:
-            self.ui.display_error(f"Unexpected error: {e}")
-            self.logger.error(f"Unexpected error: {e}", exc_info=True)
 
 
 def main():

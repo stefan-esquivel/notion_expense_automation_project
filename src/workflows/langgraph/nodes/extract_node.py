@@ -1,10 +1,8 @@
 """Extract node for LangGraph workflow."""
 
 from logging import Logger
-
-
 from pathlib import Path
-from uuid import uuid4
+from typing import Any
 
 from workflows.langgraph.state import ReceiptWorkflowState
 from domain.enums import WorkflowStatus
@@ -15,75 +13,88 @@ from logger import get_logger
 logger: Logger = get_logger(__name__)
 
 
-def extract_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
+def _resolve_file_path(state: ReceiptWorkflowState) -> Path:
+    """Resolve and validate the PDF file path from workflow input.
+
+    Raises:
+        ValueError: If workflow_input or file_path is missing.
+        FileNotFoundError: If the file does not exist on disk.
     """
-    Extract node: Extracts raw data from PDF receipt.
-    
-    This node:
+    workflow_input = state.get("workflow_input")
+    if not workflow_input or not workflow_input.file_path:
+        raise ValueError("No file path provided in workflow input")
+    path = Path(workflow_input.file_path)
+    if not path.exists():
+        raise FileNotFoundError(f"PDF file not found: {path}")
+    return path
+
+
+def _build_receipt(extracted_data: dict[str, Any]) -> Receipt:
+    """Convert raw extracted data dict into a validated Receipt model.
+
+    Raises:
+        ValueError: If amount is missing or non-positive.
+    """
+    amount = extracted_data.get("amount")
+    if not amount or amount <= 0:
+        raise ValueError(f"Invalid or missing amount in receipt: {amount}")
+    return Receipt(
+        recipt_id=extracted_data["order_id"],
+        vendor=extracted_data["merchant_name"],
+        transaction_type=extracted_data["transaction_type"],
+        summary=extracted_data["summary"],
+        date=extracted_data["date"].isoformat() if extracted_data["date"] else "",
+        items=extracted_data["items"],
+        total=amount,
+    )
+
+
+def extract_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
+    """Extract node: Extracts raw data from PDF receipt.
+
     1. Updates status to EXTRACTING
-    2. Uses PDFExtractor to parse the PDF
-    3. Converts extracted data to Receipt model
-    4. Handles errors gracefully
-    
+    2. Resolves and validates the file path
+    3. Uses PDFExtractor to parse the PDF
+    4. Converts extracted data to a Receipt model
+    5. Handles errors gracefully
+
     Args:
         state: Current workflow state with workflow_input containing file_path
-        
+
     Returns:
         Updated state with receipt data or failure information
     """
-    # Update status
     state["status"] = WorkflowStatus.EXTRACTING
-    
-    file_path = None
+    file_path: Path | None = None
+
     try:
-        # Get file path from workflow input
-        workflow_input = state.get("workflow_input")
-        if not workflow_input or not workflow_input.file_path:
-            raise ValueError("No file path provided in workflow input")
-        
-        file_path = Path(workflow_input.file_path)
+        file_path = _resolve_file_path(state)
         logger.info(f"Starting extraction for: {file_path.name}")
-        
-        # Validate file exists
-        if not file_path.exists():
-            raise FileNotFoundError(f"PDF file not found: {file_path}")
-        
-        # Initialize PDF extractor
+
         extractor = PDFExtractor(use_llm_for_items=True)
-        
-        # Extract data from PDF
         logger.info(f"📄 Extracting data from: {file_path.name}")
-        logger.debug(f"Using PDFExtractor with LLM enabled")
-        extracted_data = extractor.parse_receipt(file_path, raw_text=workflow_input.raw_text)
-        logger.debug(f"Extracted {len(extracted_data.get('items', []))} items")
-        
-        # Convert to Receipt model
-        # Validate that we have a valid amount
-        amount = extracted_data.get("amount")
-        if not amount or amount <= 0:
-            raise ValueError(f"Invalid or missing amount in receipt: {amount}")
-        
-        receipt = Receipt(
-            recipt_id=extracted_data["order_id"],
-            vendor=extracted_data["merchant_name"],
-            transaction_type=extracted_data["transaction_type"],
-            summary=extracted_data["summary"],
-            date=extracted_data["date"].isoformat() if extracted_data["date"] else "",
-            items=extracted_data["items"],
-            total=amount
+        extracted_data = extractor.parse_receipt(
+            file_path, raw_text=state["workflow_input"].raw_text
         )
-        
-        # Store receipt in state
+        logger.debug(f"Extracted {len(extracted_data.get('items', []))} items")
+
+        receipt = _build_receipt(extracted_data)
         state["receipt"] = receipt
-        
-        logger.info(f"✓ Extraction complete: {receipt.vendor} {receipt.transaction_type} - ${receipt.total:.2f}")
-        
+        logger.info(
+            f"✓ Extraction complete: {receipt.vendor} "
+            f"{receipt.transaction_type} - ${receipt.total:.2f}"
+        )
         return state
-        
-    except Exception as e:
-        # Handle extraction failure
+
+    except (FileNotFoundError, ValueError) as e:
         state["status"] = WorkflowStatus.FAILED
-        state["failure_reason"] = f"Extraction failed: {str(e)}"
-        file_name = file_path.name if file_path else "unknown file"
-        logger.error(f"✗ Extraction failed for {file_name}: {e}", exc_info=True)
+        state["failure_reason"] = f"Extraction failed: {e}"
+        file_name = file_path.name if file_path else "unknown"
+        logger.error(f"✗ Extraction failed for {file_name}: {e}")
+        return state
+    except Exception as e:
+        state["status"] = WorkflowStatus.FAILED
+        state["failure_reason"] = f"Extraction failed: {e}"
+        file_name = file_path.name if file_path else "unknown"
+        logger.exception(f"✗ Unexpected extraction error for {file_name}: {e}")
         return state

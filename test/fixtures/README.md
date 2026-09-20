@@ -21,6 +21,10 @@ Located in `pdfs/`:
 - `techzone_future_date_red.pdf` - TechZone Electronics order dated 2030-06-15 (future date → RED flag)
 - `maple_street_organics_augment.pdf` - Blank/unreadable PDF (no text → Unknown Merchant → YELLOW advisory)
 - `walmart_order_details.pdf` - Walmart.ca online order from Sep 2026 (valid receipt, no flags)
+- `2026-09-19_Longos_Groceries_English_Cucumbers_Dill_Weed_Grape_Tomatoes_$59.90.pdf` - PII-scrubbed
+  Longo's receipt that contains a loyalty-rewards section with `Total spent $103.01`. Used as a
+  regression fixture for issue #47 (loyalty total must not override the transaction total $59.90).
+  Generated from `text/longos_loyalty_receipt.txt`.
 
 These PDFs are used to test:
 - Date extraction (YYYY-MM-DD format)
@@ -41,6 +45,9 @@ Located in `json/`:
 Located in `text/`:
 
 - `sample_receipt.txt` - Plain text receipt sample
+- `longos_loyalty_receipt.txt` - PII-scrubbed source text for the Longo's loyalty receipt fixture.
+  All personal information (name, e-mail, phone number, card digits, auth codes) has been replaced
+  with generic placeholders. The PDF fixture above was generated directly from this file.
 
 ## Usage in Tests
 

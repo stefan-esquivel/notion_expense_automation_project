@@ -79,26 +79,51 @@ class PDFExtractor:
         
         return ('unknown', 'Unknown Merchant')
     
+    # Keywords that indicate a line should be excluded from total detection.
+    # These appear on loyalty/rewards summaries or temporary hold lines that
+    # must not be mistaken for the transaction total.
+    _NOISE_KEYWORDS = ('hold', 'temporary', 'spent', 'savings', 'rewards', 'points')
+
     def extract_amount(self, text: str) -> Optional[float]:
-        """Extract the total amount from receipt text."""
-        # Look for common patterns: $XX.XX, CA$XX.XX, Total: $XX.XX
+        """Extract the total amount from receipt text.
+
+        Strategy:
+        1. Scan every line for one explicitly labelled "Total" (case-insensitive)
+           that does NOT also contain a noise keyword (loyalty/hold lines).
+           Return the first such amount found.
+        2. Fall back to collecting all dollar amounts in the document and
+           returning the largest one.
+        """
+        # --- Pass 1: look for a clean "Total" line ---
+        total_line_pattern = re.compile(
+            r'^[^\S\r\n]*total[^\S\r\n]*[\$:]?\s*(?:CA)?\$?\s*(\d+[,\d]*\.?\d{2})',
+            re.IGNORECASE | re.MULTILINE,
+        )
+        for match in total_line_pattern.finditer(text):
+            line = match.group(0)
+            if not any(kw in line.lower() for kw in self._NOISE_KEYWORDS):
+                amount_str = match.group(1).replace(',', '')
+                try:
+                    return float(amount_str)
+                except ValueError:
+                    continue
+
+        # --- Pass 2: fall back to max of all amounts ---
         patterns = [
             r'(?:total|amount|grand total)[\s:]*(?:CA)?\$?\s*(\d+[,\d]*\.?\d{2})',
             r'(?:CA)?\$\s*(\d+[,\d]*\.\d{2})',
             r'(\d+[,\d]*\.\d{2})\s*(?:CAD|CA\$)',
         ]
-        
+
         amounts = []
         for pattern in patterns:
-            matches = re.finditer(pattern, text, re.IGNORECASE)
-            for match in matches:
+            for match in re.finditer(pattern, text, re.IGNORECASE):
                 amount_str = match.group(1).replace(',', '')
                 try:
                     amounts.append(float(amount_str))
                 except ValueError:
                     continue
-        
-        # Return the largest amount found (likely the total)
+
         return max(amounts) if amounts else None
     
     def extract_date(self, text: str) -> Optional[datetime]:

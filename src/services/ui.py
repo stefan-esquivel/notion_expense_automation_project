@@ -253,48 +253,89 @@ class ExpenseUI:
         )
         console.print()
 
+    def _print_edit_diff(self, original: Dict[str, Any], updated: Dict[str, Any]) -> None:
+        """Print a before/after table for any fields that changed."""
+        editable_fields = ["description", "amount", "date"]
+        changed = [
+            (field, original.get(field), updated.get(field))
+            for field in editable_fields
+            if str(original.get(field)) != str(updated.get(field))
+        ]
+        if not changed:
+            console.print("\n[dim]No fields were changed.[/dim]\n")
+            return
+
+        table = Table(title="📝 Review Your Changes", show_header=True, header_style="bold")
+        table.add_column("Field", style="bold")
+        table.add_column("Before (scanned)", style="red")
+        table.add_column("After (your edit)", style="green")
+        for field, before, after in changed:
+            before_str = before.strftime('%Y-%m-%d') if isinstance(before, datetime) else str(before)
+            after_str = after.strftime('%Y-%m-%d') if isinstance(after, datetime) else str(after)
+            table.add_row(field.capitalize(), before_str, after_str)
+
+        unchanged = [f for f in editable_fields if f not in {r[0] for r in changed}]
+        console.print(table)
+        if unchanged:
+            console.print(f"[dim]Unchanged: {', '.join(unchanged)}[/dim]\n")
+
     def review_and_edit(self, receipt_info: Dict[str, Any]) -> Dict[str, Any]:
         """
         Allow user to review and edit extracted information.
         Returns updated receipt_info.
         """
         self.display_extracted_info(receipt_info)
-        
+
         # Ask if user wants to edit
         if not Confirm.ask("📝 Do you want to edit any information?", default=False):
             return receipt_info
-        
+
+        # Snapshot originals before any edits
+        original = {
+            "description": receipt_info.get("description", ""),
+            "amount": receipt_info.get("amount", 0.0),
+            "date": receipt_info.get("date", datetime.now()),
+        }
+        updated = dict(receipt_info)
+
         # Edit description
-        current_desc = receipt_info.get('description', '')
+        current_desc = updated.get('description', '')
         new_desc = Prompt.ask(
             "Enter description",
             default=current_desc
         )
-        receipt_info['description'] = new_desc
-        
+        updated['description'] = new_desc
+
         # Edit amount
-        current_amount = receipt_info.get('amount', 0.0)
+        current_amount = updated.get('amount', 0.0)
         new_amount = Prompt.ask(
             "Enter amount (without CA$ or $)",
             default=str(current_amount)
         )
         try:
-            receipt_info['amount'] = float(new_amount)
+            updated['amount'] = float(new_amount)
         except ValueError:
             console.print("[yellow]Invalid amount, keeping original[/yellow]")
-        
+
         # Edit date
-        current_date = receipt_info.get('date', datetime.now())
+        current_date = updated.get('date', datetime.now())
         new_date_str = Prompt.ask(
             "Enter date (YYYY-MM-DD)",
             default=current_date.strftime('%Y-%m-%d')
         )
         try:
-            receipt_info['date'] = datetime.strptime(new_date_str, '%Y-%m-%d')
+            updated['date'] = datetime.strptime(new_date_str, '%Y-%m-%d')
         except ValueError:
             console.print("[yellow]Invalid date format, keeping original[/yellow]")
-        
-        console.print("\n[green]✓ Information updated[/green]\n")
+
+        # Show before/after diff and confirm
+        self._print_edit_diff(original, updated)
+        if Confirm.ask("Apply these changes?", default=True):
+            receipt_info.update(updated)
+            console.print("\n[green]✓ Information updated[/green]\n")
+        else:
+            console.print("\n[dim]Changes discarded — keeping original values.[/dim]\n")
+
         return receipt_info
     
     def select_payer(self) -> str:

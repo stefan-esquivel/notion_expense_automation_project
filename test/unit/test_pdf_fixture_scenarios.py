@@ -118,7 +118,8 @@ class TestTechZonePdfRed:
     """
 
     @pytest.fixture(scope="class")
-    def state(self):
+    @classmethod
+    def state(cls):
         return _run_pipeline(TECHZONE_PDF)
 
     def test_extraction_succeeds(self, state):
@@ -173,7 +174,8 @@ class TestMapleStreetPdfYellow:
     """
 
     @pytest.fixture(scope="class")
-    def state(self):
+    @classmethod
+    def state(cls):
         """Run the full extract → scan → augment → validate pipeline."""
         raw_text = _raw_text(MAPLE_PDF)
         initial_state = _make_initial_state(MAPLE_PDF, raw_text)
@@ -260,7 +262,8 @@ class TestWalmartPdfValid:
     """
 
     @pytest.fixture(scope="class")
-    def state(self):
+    @classmethod
+    def state(cls):
         return _run_pipeline(WALMART_PDF)
 
     def test_extraction_succeeds(self, state):

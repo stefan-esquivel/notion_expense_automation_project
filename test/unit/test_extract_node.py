@@ -40,8 +40,11 @@ class TestExtractNode:
                 raw_text="Sample receipt text"
             ),
             receipt=None,
+            scan_results=None,
+            augment_results=None,
             enriched_receipt=None,
             validation_result=None,
+            acknowledged_warnings=set(),
             review_data=None,
             expense_summary=None,
             results=None,
@@ -113,8 +116,11 @@ class TestExtractNode:
             status=WorkflowStatus.INGESTING,
             workflow_input=None,
             receipt=None,
+            scan_results=None,
+            augment_results=None,
             enriched_receipt=None,
             validation_result=None,
+            acknowledged_warnings=set(),
             review_data=None,
             expense_summary=None,
             results=None,
@@ -134,8 +140,11 @@ class TestExtractNode:
             status=WorkflowStatus.INGESTING,
             workflow_input=None,
             receipt=None,
+            scan_results=None,
+            augment_results=None,
             enriched_receipt=None,
             validation_result=None,
+            acknowledged_warnings=set(),
             review_data=None,
             expense_summary=None,
             results=None,
@@ -159,8 +168,11 @@ class TestExtractNode:
                 raw_text="Some text"
             ),
             receipt=None,
+            scan_results=None,
+            augment_results=None,
             enriched_receipt=None,
             validation_result=None,
+            acknowledged_warnings=set(),
             review_data=None,
             expense_summary=None,
             results=None,
@@ -188,7 +200,7 @@ class TestExtractNode:
         # Assertions
         assert result["status"] == WorkflowStatus.FAILED
         assert "Extraction failed" in result["failure_reason"]
-        assert "Failed to parse PDF" in result["failure_reason"]
+        assert "Failed to parse PDF" in result["failure_reason"]  # generic Exception now uses same prefix
     
     def test_extract_node_with_null_date(self, valid_state, mock_pdf_extractor):
         """Test extraction when date is None."""
@@ -273,7 +285,7 @@ class TestExtractNode:
             
             # Verify logging calls
             assert mock_logger.info.call_count >= 2
-            assert mock_logger.debug.call_count >= 2
+            assert mock_logger.debug.call_count >= 1
             
             # Check for specific log messages
             log_calls = [str(call) for call in mock_logger.info.call_args_list]

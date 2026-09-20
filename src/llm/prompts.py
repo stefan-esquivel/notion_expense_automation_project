@@ -174,3 +174,38 @@ Important:
 - Use your best judgment for categorization
 - Return empty array if no items can be extracted
 - Return valid JSON only, no markdown or explanation"""
+
+# ============================================================================
+# SUSPICIOUS CONFIDENCE CHECK PROMPTS
+# ============================================================================
+
+SUSPICIOUS_CONFIDENCE_SYSTEM = """You are a receipt quality-assurance expert.
+Your job is to spot anything suspicious or ambiguous about extracted receipt data
+that automated checks may have missed. Be concise and specific."""
+
+SUSPICIOUS_CONFIDENCE_USER = """Review this extracted receipt data and identify any suspicious or ambiguous issues:
+
+Receipt Data:
+- Merchant: {merchant}
+- Date: {date}
+- Amount: ${amount}
+- Category: {category}
+- Items: {items}
+- Enrichment notes: {notes}
+
+The automated confidence score for this receipt is {confidence_score:.0%}, which is below the
+normal threshold. Identify the most likely reason(s) the data looks uncertain or suspicious.
+
+Return JSON:
+{{
+  "suspicious_reasons": ["reason 1", "reason 2"],
+  "affected_fields": ["field1", "field2"],
+  "summary": "One-sentence plain-English summary for the user"
+}}
+
+Rules:
+- Only flag things that are genuinely unclear or suspicious in the data above
+- If you see nothing suspicious, return empty lists and summary: "No specific issues detected"
+- Do not repeat issues already covered by: missing fields, invalid amounts, future/old dates, total mismatch
+- Be specific, e.g. "Merchant name looks like a website domain, not a store name" not "merchant is wrong"
+- Return valid JSON only, no markdown or explanation"""

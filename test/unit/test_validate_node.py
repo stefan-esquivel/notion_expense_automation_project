@@ -11,8 +11,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 
 from workflows.langgraph.nodes.validate_node import validate_node
 from workflows.langgraph.state import ReceiptWorkflowState
-from domain.enums import WorkflowStatus, Sources
-from domain.models.workflow import WorkflowInput
+from domain.enums import WorkflowStatus, Sources, ValidationSeverity
+from domain.models.workflow import WorkflowInput, ValidationIssue
 from domain.models.recipts import Receipt, ReceiptItem
 from domain.models.enrichment import EnrichedReceipt
 
@@ -380,3 +380,154 @@ class TestValidateNode:
         # With the RED key acknowledged (user overrode it) → green
         keys = {i.key for i in result["validation_result"].issues}
         assert result["validation_result"].is_green(keys) is True
+
+
+    # ── LLM suspicious-confidence catch-all ───────────────────────────────────
+
+    def test_llm_catchall_fires_when_low_confidence_and_no_issues(self):
+        """LLM catch-all YELLOW fires when confidence < threshold and no named issues exist.
+
+        Strategy: give the receipt a low-confidence enrichment result (0.4) so
+        ``_check_enrichment_confidence`` pushes the score below the threshold,
+        then set the threshold just above the enrichment score (0.5) so the
+        condition triggers — but wipe the enrichment issue from ``all_issues``
+        by patching ``_check_enrichment_confidence`` to return nothing.
+        That way confidence is low, issues list is empty, and the LLM fires.
+        """
+        from domain.models.recipts import Receipt
+        clean_receipt = Receipt(
+            recipt_id="test-clean",
+            vendor="Walmart",
+            transaction_type="Order",
+            summary=None,
+            date="2026-05-08",
+            items=[],
+            total=11.99,
+        )
+        low_enrichment = EnrichedReceipt(
+            merchant_category="other",
+            confidence_score=0.4,  # below LOW_CONFIDENCE_THRESHOLD → score ends at 0.4
+            notes="test low confidence",
+        )
+        clean_state = ReceiptWorkflowState(
+            status=WorkflowStatus.ENRICHING,
+            workflow_input=None,
+            receipt=clean_receipt,
+            scan_results=None,
+            augment_results=None,
+            enriched_receipt=low_enrichment,
+            validation_result=None,
+            acknowledged_warnings=set(),
+            review_data=None,
+            expense_summary=None,
+            results=None,
+            failure_reason=None,
+        )
+        llm_issue_fixture = ValidationIssue(
+            message="Low confidence (40%) — merchant name looks like a URL (merchant looks like a domain name)",
+            severity=ValidationSeverity.YELLOW,
+            field=None,
+            key="suspicious_confidence",
+        )
+
+        # Suppress the enrichment YELLOW so all_issues stays empty,
+        # while the confidence score (0.4) still drops below the threshold.
+        import workflows.langgraph.nodes.validate_node as vn_module
+        with patch.object(vn_module, "_check_enrichment_confidence", return_value=([], 0.4)), \
+             patch.object(vn_module, "SUSPICIOUS_CONFIDENCE_THRESHOLD", 0.5), \
+             patch.object(vn_module, "llm_suspicious_confidence_check", return_value=llm_issue_fixture):
+            result = validate_node(clean_state)
+
+        warnings = result["validation_result"].warnings
+        assert any("Low confidence" in w for w in warnings)
+
+    def test_llm_catchall_does_not_fire_when_issues_already_explain_score(self, valid_state):
+        """LLM catch-all must NOT fire when named checks already produced issues."""
+        valid_state["receipt"].total = -5.0  # triggers RED invalid_amount
+
+        with patch(
+            "workflows.langgraph.nodes.validate_node.llm_suspicious_confidence_check"
+        ) as mock_llm:
+            import workflows.langgraph.nodes.validate_node as vn_module
+            with patch.object(vn_module, "SUSPICIOUS_CONFIDENCE_THRESHOLD", 1.0):
+                result = validate_node(valid_state)
+
+        # LLM should never have been called because all_issues was not empty
+        mock_llm.assert_not_called()
+
+    def test_llm_catchall_does_not_fire_above_threshold(self, valid_state):
+        """LLM catch-all must NOT fire when confidence_score >= threshold."""
+        with patch(
+            "workflows.langgraph.nodes.validate_node.llm_suspicious_confidence_check"
+        ) as mock_llm:
+            # Default threshold is 0.60; clean receipt scores 1.0 → no trigger
+            result = validate_node(valid_state)
+
+        mock_llm.assert_not_called()
+
+    def test_llm_catchall_skipped_when_llm_returns_none(self, valid_state):
+        """When LLM finds nothing suspicious it returns None; no issue is added."""
+        with patch(
+            "workflows.langgraph.nodes.validate_node.llm_suspicious_confidence_check",
+            return_value=None,
+        ):
+            import workflows.langgraph.nodes.validate_node as vn_module
+            with patch.object(vn_module, "SUSPICIOUS_CONFIDENCE_THRESHOLD", 1.0):
+                result = validate_node(valid_state)
+
+        assert not any(
+            i.key == "suspicious_confidence"
+            for i in result["validation_result"].issues
+        )
+
+    def test_llm_catchall_issue_has_correct_key_and_severity(self):
+        """Issue produced by LLM catch-all uses stable key and YELLOW severity."""
+        from domain.models.recipts import Receipt
+        clean_receipt = Receipt(
+            recipt_id="test-clean-2",
+            vendor="Walmart",
+            transaction_type="Order",
+            summary=None,
+            date="2026-05-08",
+            items=[],
+            total=11.99,
+        )
+        low_enrichment = EnrichedReceipt(
+            merchant_category="other",
+            confidence_score=0.4,
+            notes="test",
+        )
+        clean_state = ReceiptWorkflowState(
+            status=WorkflowStatus.ENRICHING,
+            workflow_input=None,
+            receipt=clean_receipt,
+            scan_results=None,
+            augment_results=None,
+            enriched_receipt=low_enrichment,
+            validation_result=None,
+            acknowledged_warnings=set(),
+            review_data=None,
+            expense_summary=None,
+            results=None,
+            failure_reason=None,
+        )
+        llm_issue_fixture = ValidationIssue(
+            message="Low confidence (40%) — something looks off (test reason)",
+            severity=ValidationSeverity.YELLOW,
+            field=None,
+            key="suspicious_confidence",
+        )
+
+        import workflows.langgraph.nodes.validate_node as vn_module
+        with patch.object(vn_module, "_check_enrichment_confidence", return_value=([], 0.4)), \
+             patch.object(vn_module, "SUSPICIOUS_CONFIDENCE_THRESHOLD", 0.5), \
+             patch.object(vn_module, "llm_suspicious_confidence_check", return_value=llm_issue_fixture):
+            result = validate_node(clean_state)
+
+        issue = next(
+            (i for i in result["validation_result"].issues if i.key == "suspicious_confidence"),
+            None,
+        )
+        assert issue is not None
+        assert issue.severity == ValidationSeverity.YELLOW
+        assert issue.field is None

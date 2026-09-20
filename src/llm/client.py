@@ -20,6 +20,8 @@ from llm.prompts import (
     PARSE_DATE_USER,
     EXTRACT_ITEMS_SYSTEM,
     EXTRACT_ITEMS_USER,
+    SUSPICIOUS_CONFIDENCE_SYSTEM,
+    SUSPICIOUS_CONFIDENCE_USER,
 )
 
 
@@ -228,6 +230,63 @@ class ReceiptLLMClient:
         except json.JSONDecodeError as e:
             raise ValueError(f"Failed to parse LLM response as JSON: {e}\nResponse: {response}")
     
+    def suspicious_confidence_check(
+        self,
+        merchant: str,
+        date: str,
+        amount: Optional[float],
+        category: str,
+        items: Optional[list],
+        notes: Optional[str],
+        confidence_score: float,
+    ) -> Dict[str, Any]:
+        """Ask the LLM why a receipt has an unexpectedly low confidence score.
+
+        Args:
+            merchant:         Extracted merchant name.
+            date:             Extracted date string.
+            amount:           Extracted total amount.
+            category:         Enriched merchant category.
+            items:            List of line items (Pydantic models or dicts).
+            notes:            Enrichment notes, if any.
+            confidence_score: The composite confidence score that triggered this call.
+
+        Returns:
+            Dict with keys ``suspicious_reasons`` (list[str]),
+            ``affected_fields`` (list[str]), and ``summary`` (str).
+        """
+        import json as _json
+        items_list = []
+        for item in (items or []):
+            if hasattr(item, "model_dump"):
+                items_list.append(item.model_dump())
+            elif hasattr(item, "dict"):
+                items_list.append(item.dict())
+            else:
+                items_list.append(item)
+
+        user_prompt = SUSPICIOUS_CONFIDENCE_USER.format(
+            merchant=merchant or "Unknown",
+            date=date or "Unknown",
+            amount=f"{amount:.2f}" if amount is not None else "Unknown",
+            category=category or "Unknown",
+            items=_json.dumps(items_list),
+            notes=notes or "None",
+            confidence_score=confidence_score,
+        )
+
+        response = self._call_llm(
+            system_prompt=SUSPICIOUS_CONFIDENCE_SYSTEM,
+            user_prompt=user_prompt,
+            temperature=0.1,
+            response_format={"type": "json_object"},
+        )
+
+        try:
+            return _json.loads(response)
+        except _json.JSONDecodeError as e:
+            raise ValueError(f"Failed to parse LLM suspicious-confidence response as JSON: {e}\nResponse: {response}")
+
     def extract_items(self, raw_text: str) -> Dict[str, Any]:
         """
         Extract individual line items from receipt text using LLM.

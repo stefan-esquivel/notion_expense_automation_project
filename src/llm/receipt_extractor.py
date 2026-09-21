@@ -208,10 +208,10 @@ def llm_suspicious_confidence_check(
     from domain.models.workflow import ValidationIssue
     from domain.enums import ValidationSeverity
 
-    if client is None:
-        client = ReceiptLLMClient()
-
     try:
+        if client is None:
+            client = ReceiptLLMClient()
+
         result = client.suspicious_confidence_check(
             merchant=receipt.vendor or "",
             date=receipt.date or "",

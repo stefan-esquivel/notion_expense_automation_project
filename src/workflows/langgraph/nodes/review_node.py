@@ -9,7 +9,7 @@ from domain.enums import WorkflowStatus, ValidationSeverity
 from domain.models.workflow import ReviewData, ValidationIssue
 from domain.models.expense import ExpenseSummary, SplitDetail
 from config import Config
-from services.ui import ExpenseUI, OVERRIDE_SENTINEL
+from services.ui import ExpenseUI, OVERRIDE_SENTINEL, SKIP_SENTINEL
 from logger import get_logger
 
 logger = get_logger(__name__)
@@ -38,7 +38,7 @@ def _resolve_issues(
 
     Returns:
         True  – user resolved / acknowledged everything and wants to continue.
-        False – user cancelled (KeyboardInterrupt).
+        False – user skipped the file or cancelled (KeyboardInterrupt).
     """
     validation_result = state.get("validation_result")
     if not validation_result or not validation_result.issues:
@@ -65,6 +65,11 @@ def _resolve_issues(
             fixed = ui.prompt_fix_red_issue(issue, receipt)
             if fixed is None:
                 return False  # user cancelled
+            if fixed == SKIP_SENTINEL:
+                reason = "RED issue not resolved — skipping this file."
+                state["failure_reason"] = f"{reason} ({issue.message})"
+                ui.display_validation_skip(issue, reason)
+                return False
 
             # User chose to keep the current value and override the RED error.
             # Downgrade it to an acknowledged YELLOW so the loop can exit.
@@ -97,6 +102,11 @@ def _resolve_issues(
         ack = ui.prompt_acknowledge_yellow(issue)
         if ack is None:
             return False  # user cancelled
+        if ack is False:
+            reason = "YELLOW warning not acknowledged — skipping this file."
+            state["failure_reason"] = f"{reason} ({issue.message})"
+            ui.display_validation_skip(issue, reason)
+            return False
         if ack:
             acknowledged.add(issue.key)
 
@@ -134,8 +144,8 @@ def review_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
         ok = _resolve_issues(state, ui)
         if not ok:
             state["status"] = WorkflowStatus.FAILED
-            state["failure_reason"] = "Review cancelled by user"
-            logger.info("\n\n❌ Review cancelled")
+            state["failure_reason"] = state.get("failure_reason") or "Review cancelled by user"
+            logger.info(state["failure_reason"])
             return state
 
         # Re-read receipt after possible edits in _resolve_issues

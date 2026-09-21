@@ -207,8 +207,9 @@ def validate_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
     The graph routes back to review until is_green() returns True.
 
     When the composite confidence score falls below SUSPICIOUS_CONFIDENCE_THRESHOLD
-    and none of the named checks explain it, the LLM is called to produce a
-    catch-all YELLOW advisory so the user knows something looks off.
+    and only the generic enrichment-confidence warning exists, the LLM can
+    replace it with a specific YELLOW advisory. Keep the generic warning
+    if the LLM finds nothing or is unavailable.
 
     Args:
         state: Current workflow state with receipt and enriched_receipt
@@ -241,12 +242,13 @@ def validate_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
             confidence_score *= conf
 
         # ── LLM catch-all: low confidence with no specific explanation ────
-        if confidence_score < SUSPICIOUS_CONFIDENCE_THRESHOLD and not all_issues:
+        if (confidence_score < SUSPICIOUS_CONFIDENCE_THRESHOLD
+                and all(i.key == "low_enrichment_confidence" for i in all_issues)):
             enriched = state.get("enriched_receipt")
             llm_issue = llm_suspicious_confidence_check(receipt, enriched, confidence_score)
             if llm_issue:
                 logger.info(f"🤖 LLM flagged suspicious confidence: {llm_issue.message}")
-                all_issues.append(llm_issue)
+                all_issues = [llm_issue]
 
         state["validation_result"] = ValidationResult(
             issues=all_issues,

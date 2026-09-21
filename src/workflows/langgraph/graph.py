@@ -45,25 +45,22 @@ def missing_information(state: ReceiptWorkflowState) -> str:
 
 
 def _route_after_review(state: ReceiptWorkflowState) -> str:
-    """Route after review back to validate or forward to commit.
+    """Route after persisted post-review validation to review or commit.
 
     Returns:
-        "failed"   – review node itself failed (user cancelled, etc.)
-        "validate" – loop: user made edits; re-run validation
-        "commit"   – all issues are GREEN; safe to commit
+        "failed"   - post-review validation failed
+        "review"   - updated receipt still has unresolved issues
+        "commit"   - all issues are GREEN; safe to commit
     """
     if state.get("status") == WorkflowStatus.FAILED:
         return "failed"
 
-    # Re-run validation so we evaluate the updated/corrected receipt
-    state = validate_node(state)
-
     validation_result = state.get("validation_result")
     acknowledged = state.get("acknowledged_warnings") or set()
 
-    # If there is no validation result yet, or it is not green, go back to validate.
+    # Unresolved issues must be reviewed before committing.
     if validation_result is None or not validation_result.is_green(acknowledged):
-        return "validate"
+        return "review"
 
     return "commit"
 
@@ -79,6 +76,7 @@ def build_graph():
     graph.add_node("enrich", enrich_node)
     graph.add_node("validate", validate_node)
     graph.add_node("review", review_node)
+    graph.add_node("revalidate", validate_node)
     graph.add_node("commit", commit_node)
 
     graph.set_entry_point("ingest")
@@ -103,8 +101,14 @@ def build_graph():
 
     graph.add_conditional_edges(
         "review",
+        _route_or_end("revalidate"),
+        {"continue": "revalidate", "failed": END},
+    )
+
+    graph.add_conditional_edges(
+        "revalidate",
         _route_after_review,
-        {"validate": "validate", "commit": "commit", "failed": END},
+        {"review": "review", "commit": "commit", "failed": END},
     )
 
     graph.add_edge("commit", END)

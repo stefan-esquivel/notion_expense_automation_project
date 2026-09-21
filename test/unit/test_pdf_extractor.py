@@ -132,8 +132,45 @@ class TestPDFExtractor:
         """Test amount extraction when no amount is found"""
         text = "This text has no amount"
         amount = extractor.extract_amount(text)
-        
+
         assert amount is None
+
+    def test_extract_amount_ignores_loyalty_total_spent(self, extractor):
+        """Loyalty 'Total spent' should not override the transaction Total (issue #47)."""
+        text = (
+            "Subtotal                        $52.12\n"
+            "HST                              $7.78\n"
+            "Total                           $59.90\n"
+            "\n"
+            "Longo's Thank You Rewards\n"
+            "Total spent                    $103.01\n"
+            "Points earned                     1030\n"
+        )
+        amount = extractor.extract_amount(text)
+
+        assert amount == 59.90
+
+    def test_extract_amount_ignores_hold_line(self, extractor):
+        """Temporary hold lines should not override the transaction Total (issue #33 pattern)."""
+        text = (
+            "Subtotal                        $70.00\n"
+            "Tax                              $5.00\n"
+            "Total                           $75.00\n"
+            "Temporary hold                 $100.00\n"
+        )
+        amount = extractor.extract_amount(text)
+
+        assert amount == 75.00
+
+    def test_extract_amount_prefers_total_label_over_max(self, extractor):
+        """When a clean Total line exists, return its amount even if a larger amount appears elsewhere."""
+        text = (
+            "Total                           $49.99\n"
+            "Savings this visit             $200.00\n"
+        )
+        amount = extractor.extract_amount(text)
+
+        assert amount == 49.99
     
     def test_detect_merchant_walmart(self, extractor):
         """Test Walmart merchant detection"""

@@ -18,6 +18,7 @@ console = Console()
 # Returned by prompt_fix_red_issue when the user chooses to keep the current
 # value and override the RED error (downgrades it to an acknowledged YELLOW).
 OVERRIDE_SENTINEL = "__OVERRIDE__"
+SKIP_SENTINEL = "__SKIP__"
 
 
 class ExpenseUI:
@@ -110,6 +111,7 @@ class ExpenseUI:
             str  – the corrected value to apply to the receipt.
             ``OVERRIDE_SENTINEL`` – the user chose to keep the current value
                 and override the error (converts the RED to an acknowledged YELLOW).
+            ``SKIP_SENTINEL`` – the user declined to resolve the issue; skip the file.
             None – the user cancelled (KeyboardInterrupt).
 
         The caller is responsible for applying the value to the receipt.
@@ -129,32 +131,35 @@ class ExpenseUI:
             if new_val == current:
                 try:
                     confirmed = Confirm.ask(
-                        "  ⚠️  Keep the current value and proceed with a warning?",
+                        "  ⚠️  Keep the current value and proceed with a warning? (No skips this file)",
                         default=False,
                     )
                 except KeyboardInterrupt:
                     return None
                 if confirmed:
                     return OVERRIDE_SENTINEL
-                # User said no — loop back (return the unchanged value so the
-                # caller's while-loop will re-prompt)
-                return current
+                return SKIP_SENTINEL
             return new_val
 
         if issue.field == "vendor":
             current = receipt.vendor or ""
             try:
-                new_val = Prompt.ask("  Enter corrected merchant name", default=current)
+                new_val = Prompt.ask("  Enter corrected merchant name, or keep unchanged to skip this file", default=current)
             except KeyboardInterrupt:
                 return None
-            return new_val
+            return SKIP_SENTINEL if new_val.strip() == current.strip() else new_val
 
         if issue.field == "total":
             current = str(receipt.total) if receipt.total else "0.0"
             try:
-                new_val = Prompt.ask("  Enter corrected amount (number only)", default=current)
+                new_val = Prompt.ask("  Enter corrected amount (number only), or keep unchanged to skip this file", default=current)
             except KeyboardInterrupt:
                 return None
+            try:
+                if float(new_val.replace("$", "").replace(",", "").strip()) == float(current):
+                    return SKIP_SENTINEL
+            except ValueError:
+                pass  # The caller handles invalid input and retries the correction.
             return new_val
 
         # Generic fallback for any future RED field
@@ -170,18 +175,23 @@ class ExpenseUI:
     ) -> Optional[bool]:
         """Ask the user to acknowledge a YELLOW advisory issue.
 
-        Returns True if acknowledged, False if they want to fix it instead
-        (which will cause re-validation), or None if they cancelled.
+        Returns True if acknowledged, False to skip this file,
+        or None if they cancelled.
         """
         console.print(f"[bold yellow]🟡 Advisory:[/bold yellow] {issue.message}")
         try:
             ack = Confirm.ask(
-                "  Acknowledge and proceed with this warning?",
+                "  Acknowledge and proceed with this warning? (No skips this file)",
                 default=True,
             )
         except KeyboardInterrupt:
             return None
         return ack
+
+    def display_validation_skip(self, issue: "ValidationIssue", reason: str) -> None:
+        """Explain why validation stopped processing the current file."""
+        console.print(f"\n{reason}", style="bold yellow", markup=False)
+        console.print(issue.message, style="dim", markup=False)
 
     def display_scan_augment_summary(
         self,
@@ -476,4 +486,3 @@ class ExpenseUI:
     def display_processing(self, filename: str):
         """Display processing message."""
         console.print(f"\n[cyan]🔄 Processing receipt: {filename}[/cyan]\n")
-

@@ -455,7 +455,7 @@ class TestNotionExpenseClient:
             code=APIErrorCode.ValidationError
         )
         
-        with pytest.raises(Exception, match="Failed to create expense entry"):
+        with pytest.raises(APIResponseError, match="Bad Request"):
             notion_client.create_expense_entry(
                 merchant_description="Test",
                 date=datetime(2026, 3, 10),
@@ -507,7 +507,7 @@ class TestNotionExpenseClient:
             code=APIErrorCode.ValidationError
         )
         
-        with pytest.raises(Exception, match="Failed to create split entry"):
+        with pytest.raises(APIResponseError, match="Bad Request"):
             notion_client.create_split_entry(
                 title="Test Split",
                 person="Alice",
@@ -600,7 +600,7 @@ class TestNotionExpenseClient:
             code=APIErrorCode.ObjectNotFound
         )
         
-        with pytest.raises(Exception, match="Failed to link source page"):
+        with pytest.raises(APIResponseError, match="Not Found"):
             notion_client._link_pages(
                 source_page_id="source-page",
                 target_page_id="target-page",

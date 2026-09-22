@@ -24,10 +24,11 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
-def workflow(monkeypatch):
+def workflow(monkeypatch, tmp_path):
     # Start with an extracted receipt; run the real validation, review and commit nodes.
     for name in ("ingest_node", "extract_node", "scan_node", "augment_node", "enrich_node"):
         monkeypatch.setattr(graph_module, name, lambda state: state)
+    monkeypatch.setattr(Config, "SUBMISSION_JOURNAL_PATH", tmp_path / "journal.sqlite3")
     for name, value in {"YOUR_NAME": "Alex", "PARTNER_NAME": "Sam",
                         "YOUR_USER_ID": "a" * 32, "PARTNER_USER_ID": "b" * 32,
                         "NOTION_API_TOKEN": "synthetic-test-token",
@@ -174,3 +175,17 @@ def test_low_confidence_advisory_is_reviewed_before_commit(workflow, monkeypatch
     assert client.suspicious_confidence_check.call_count == 2
     assert client.suspicious_confidence_check.call_args.kwargs["confidence_score"] == 0.4
     assert api.pages.create.call_count == 2
+
+
+@pytest.mark.parametrize('description,expected', [
+    ('Amazon Order (Baking Sheets)', "Sam's Amazon Order Split (Baking Sheets)"),
+    ('Walmart (Groceries)', "Sam's Walmart Food Split (Groceries)"),
+    ('Netflix', "Sam's Netflix Payment (Jan)"),
+])
+def test_shared_titles_reach_preview_and_notion(workflow, description, expected):
+    state, ui, api = workflow
+    ui.review_and_edit.side_effect = lambda info: {**info, 'description': description}
+    result = graph_module.build_graph().invoke(state)
+    assert result['status'] == WorkflowStatus.COMPLETED
+    assert result['expense_summary'].splits[0].title == expected
+    assert api.pages.create.call_args_list[1].kwargs['properties']['Title']['title'][0]['text']['content'] == expected

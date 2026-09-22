@@ -60,6 +60,7 @@ class Config:
     INPUT_FOLDER = PROJECT_ROOT / os.getenv('INPUT_FOLDER', 'receipts/input')
     PROCESSED_FOLDER = PROJECT_ROOT / os.getenv('PROCESSED_FOLDER', 'receipts/processed')
     LOG_FOLDER = PROJECT_ROOT / 'logs'
+    SUBMISSION_JOURNAL_PATH = PROJECT_ROOT / '.submission-state' / 'journal.sqlite3'
     
     # Split Configuration
     DEFAULT_SPLIT_PERCENTAGE = float(os.getenv('DEFAULT_SPLIT_PERCENTAGE', '50.0'))

@@ -20,6 +20,7 @@ FIXTURES = Path(__file__).resolve().parents[1] / 'fixtures' / 'pdfs'
 
 @pytest.fixture
 def workflow(tmp_path, monkeypatch):
+    monkeypatch.setattr(Config, 'OPENAI_API_KEY', 'synthetic-test-key')
     for key, value in {'SUBMISSION_JOURNAL_PATH': tmp_path / 'journal.sqlite3',
                        'PROCESSED_FOLDER': tmp_path / 'processed', 'ENVIRONMENT': 'qa',
                        'QA_SKIP_COMMIT': False, 'NOTION_API_TOKEN': 'synthetic',
@@ -74,6 +75,9 @@ def test_pdf_through_entire_graph(workflow, tmp_path, filename, amount, title):
     assert result['results'].notion_split_ids == ['2' * 32]
     assert result['results'].archive_path.is_file()
     assert not source.exists()
+    ui.review_and_edit.assert_called_once()
+    ui.confirm_send_to_notion.assert_called_once()
+    assert result['validation_result'].is_green(result['acknowledged_warnings'])
     # Re-processing the archived PDF also traverses the real graph, without new pages.
     again = build_graph().invoke(create_initial_state(str(result['results'].archive_path)))
     assert again['status'] == WorkflowStatus.DUPLICATE, again.get('failure_reason')
@@ -90,6 +94,79 @@ def test_invalid_pdf_stops_before_submission(workflow, tmp_path):
     assert result['status'] == WorkflowStatus.FAILED
     api.pages.create.assert_not_called()
     assert source.exists()
+
+
+def test_corrupt_pdf_fails_during_ingestion(workflow, tmp_path):
+    api, ui = workflow
+    source = tmp_path / 'corrupt.pdf'
+    source.write_bytes(b'not a PDF')
+    result = build_graph().invoke(create_initial_state(str(source)))
+    assert result['status'] == WorkflowStatus.FAILED
+    assert 'Ingestion failed' in result['failure_reason']
+    ui.review_and_edit.assert_not_called()
+    api.pages.create.assert_not_called()
+    assert source.exists()
+
+
+def test_missing_date_routes_through_augment(workflow, tmp_path, monkeypatch):
+    from domain.models.recipts import Receipt
+
+    api, ui = workflow
+    source = tmp_path / 'receipt.pdf'
+    shutil.copyfile(FIXTURES / '2026-03-04_Walmart_Order_Meatballs_$80.59.pdf', source)
+    state = create_initial_state(str(source))
+    # Exercise real parsing with supplied synthetic text lacking a date.
+    state['workflow_input'].raw_text = 'Walmart\nTotal: $80.59\n'
+    augment = Mock(return_value=Receipt(vendor='Walmart', transaction_type='Order', date='2026-03-04', total=80.59))
+    monkeypatch.setattr(importlib.import_module('workflows.langgraph.nodes.augment_node'),
+                        'llm_extract_receipt', augment)
+    result = build_graph().invoke(state)
+    assert result['status'] == WorkflowStatus.COMPLETED
+    assert result['scan_results'].missing_fields == ['date']
+    assert result['augment_results'].filled_fields == {'date': 'llm_extraction'}
+    assert result['augment_results'].still_missing == []
+    augment.assert_called_once_with(state['workflow_input'].raw_text)
+    ui.review_and_edit.assert_called_once()
+    assert api.pages.create.call_args_list[0].kwargs['properties']['Date']['date']['start'] == '2026-03-04'
+
+
+def test_unavailable_llm_falls_back_and_requires_acknowledgement(workflow, tmp_path, monkeypatch):
+    from llm.receipt_extractor import llm_enrich_receipt
+
+    api, ui = workflow
+    source = tmp_path / 'receipt.pdf'
+    shutil.copyfile(FIXTURES / '2026-03-04_Walmart_Order_Meatballs_$80.59.pdf', source)
+    monkeypatch.setattr(Config, 'OPENAI_API_KEY', None)
+    monkeypatch.setattr(importlib.import_module('workflows.langgraph.nodes.enrich_node'),
+                        'llm_enrich_receipt', llm_enrich_receipt)
+    result = build_graph().invoke(create_initial_state(str(source)))
+    assert result['status'] == WorkflowStatus.COMPLETED
+    assert result['receipt'].items == []
+    assert result['enriched_receipt'].confidence_score == 0.5
+    assert result['enriched_receipt'].merchant_category == 'grocery'
+    assert 'low_enrichment_confidence' in result['acknowledged_warnings']
+    ui.prompt_acknowledge_yellow.assert_called_once()
+    assert api.pages.create.call_count == 2
+
+
+def test_archive_failure_is_duplicate_on_full_graph_retry(workflow, tmp_path, monkeypatch):
+    from services.file_organizer import FileOrganizer
+
+    api, ui = workflow
+    source = tmp_path / 'receipt.pdf'
+    shutil.copyfile(FIXTURES / '2026-03-04_Walmart_Order_Meatballs_$80.59.pdf', source)
+    archive = Mock(side_effect=OSError('synthetic disk failure'))
+    monkeypatch.setattr(FileOrganizer, 'organize_file', archive)
+    first = build_graph().invoke(create_initial_state(str(source)))
+    assert first['status'] == WorkflowStatus.FAILED
+    assert 'synthetic disk failure' in first['failure_reason']
+    ui.reset_mock()
+    again = build_graph().invoke(create_initial_state(str(source)))
+    assert again['status'] == WorkflowStatus.DUPLICATE
+    assert source.exists()
+    ui.review_and_edit.assert_not_called()
+    archive.assert_called_once()
+    assert api.pages.create.call_count == 2
 
 
 def test_duplicate_stops_before_pdf_parsing_or_review(workflow, tmp_path, monkeypatch):

@@ -479,6 +479,10 @@ class ExpenseUI:
         console.print(f"[green]Receipt organized to: {organized_path}[/green]")
         console.print("[green]Expense and split entries created in Notion[/green]\n")
     
+    def display_duplicate(self):
+        """Explain a normal duplicate skip without reporting a submission error."""
+        console.print("\n[yellow]Already submitted — skipped. No new Notion entries were created.[/yellow]\n")
+
     def display_error(self, error_message: str):
         """Display error message."""
         console.print(f"\n[bold red]✗ Error:[/bold red] {error_message}\n")

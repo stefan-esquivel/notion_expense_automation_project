@@ -29,8 +29,8 @@ class WorkflowInput(BaseModel):
     )
     
     raw_text: str = Field(
-        description="Raw text extracted from the PDF file",
-        min_length=1
+        default="",
+        description="Raw PDF text, populated during ingestion after the duplicate check"
     )
 
 

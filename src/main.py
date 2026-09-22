@@ -22,10 +22,10 @@ class ExpenseAutomation:
             notion_client=None  # Will be initialized in workflow nodes
         )
     
-    def process_receipt(self, pdf_path: Path) -> bool:
+    def process_receipt(self, pdf_path: Path) -> bool | None:
         """
         Process a single receipt through the LangGraph workflow.
-        Returns True if successful, False otherwise.
+        Returns True on success, None for an existing duplicate, False on failure.
         """
         try:
             self.ui.display_processing(pdf_path.name)
@@ -38,6 +38,10 @@ class ExpenseAutomation:
             result = self.workflow.invoke(initial_state)
             
             # Check workflow status
+            if result['status'] == WorkflowStatus.DUPLICATE:
+                self.ui.display_duplicate()
+                self.logger.info(f"Skipped already-submitted receipt: {pdf_path.name}")
+                return None
             if result['status'] == WorkflowStatus.COMPLETED:
                 if result.get('results'):
                     results = result['results']
@@ -103,12 +107,13 @@ class ExpenseAutomation:
             self.logger.info(f"Found {len(pdf_files)} receipt(s) to process")
 
             # Process each receipt
-            success_count = sum(
-                self.process_receipt(pdf_path=f) for f in pdf_files
-            )
+            outcomes = [self.process_receipt(pdf_path=f) for f in pdf_files]
+            success_count = sum(outcome is True for outcome in outcomes)
+            duplicate_count = sum(outcome is None for outcome in outcomes)
 
             # Summary
-            self.logger.info(f"Processed {success_count}/{len(pdf_files)} receipts successfully")
+            self.logger.info(f"Processed {success_count}/{len(pdf_files)} receipts successfully; "
+                             f"skipped {duplicate_count} already-submitted receipts")
 
         except ValueError as e:
             self.ui.display_error(f"Configuration error: {e}")

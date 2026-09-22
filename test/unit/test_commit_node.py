@@ -18,9 +18,21 @@ from domain.models.expense import ExpenseSummary, SplitDetail
 from domain.models.recipts import Receipt
 
 
+pytestmark = pytest.mark.unit
+
+
 class TestCommitNode:
     """Test suite for commit_node functionality."""
     
+    @pytest.fixture(autouse=True)
+    def mock_journal(self, tmp_path):
+        with patch('workflows.langgraph.nodes.commit_node.SubmissionJournal') as factory:
+            journal = factory.return_value.__enter__.return_value
+            journal.prepare.return_value = 'submission-id'
+            journal.run.side_effect = lambda key, name, call, **kwargs: call()
+            journal.archive_destination.return_value = tmp_path / 'archive.pdf'
+            yield journal
+
     @pytest.fixture
     def mock_config(self):
         """Mock Config values."""
@@ -33,6 +45,10 @@ class TestCommitNode:
             mock.PARTNER_NAME = "Jane Doe"
             mock.PROCESSED_FOLDER = "/path/to/processed"
             mock.QA_SKIP_COMMIT = False
+            mock.ENVIRONMENT = 'qa'
+            mock.YOUR_USER_ID = 'a' * 32
+            mock.PARTNER_USER_ID = 'b' * 32
+            mock.EXPENSE_RELATION_PROPERTY = 'Split Details Table'
             mock.validate.return_value = True
             yield mock
     

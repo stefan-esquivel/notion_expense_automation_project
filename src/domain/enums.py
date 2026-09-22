@@ -28,6 +28,7 @@ class WorkflowStatus(Enum):
     REVIEWING = "reviewing"      # Waiting for human review
     SUBMITTING = "submitting"    # Sending to Notion API
     ARCHIVING = "archiving"      # Moving file to processed folder
+    DUPLICATE = "duplicate"      # Already submitted; skipped before extraction
     COMPLETED = "completed"      # Successfully finished
     FAILED = "failed"            # Error occurred
 

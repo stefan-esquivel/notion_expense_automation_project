@@ -1,5 +1,6 @@
 """File organization and management module."""
 import shutil
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -73,7 +74,7 @@ class FileOrganizer:
         
         return sanitized
     
-    def organize_file(
+    def plan_destination(
         self,
         source_path: Path,
         date: datetime,
@@ -82,8 +83,8 @@ class FileOrganizer:
         amount: float
     ) -> Path:
         """
-        Move and rename file to organized folder structure.
-        Creates hierarchical folders: processed/YYYY/MMM/vendor/filename.pdf
+        Choose an unused destination in processed/YYYY/MMM/vendor/filename.pdf.
+        Creates the destination directory without moving the source.
         
         Example: receipts/processed/2026/Feb/walmart/receipt_2026-02-15.pdf
         """
@@ -118,9 +119,31 @@ class FileOrganizer:
                 dest_path = vendor_folder / f"{base}_{counter}{ext}"
                 counter += 1
         
-        # Move file
-        shutil.move(str(source_path), str(dest_path))
-        
+        return dest_path
+
+    def organize_file(
+        self, source_path: Path, date: datetime, merchant_name: str,
+        description: str, amount: float, *, destination_path: Optional[Path] = None,
+    ) -> Path:
+        """Move to a planned destination; never overwrite an existing receipt."""
+        dest_path = destination_path or self.plan_destination(
+            source_path, date, merchant_name, description, amount)
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        # An exclusive destination prevents accidental overwrites. Copy first,
+        # then unlink so interrupted cross-filesystem moves retain the source.
+        try:
+            with dest_path.open('xb') as target:
+                with source_path.open('rb') as source:
+                    shutil.copyfileobj(source, target)
+                target.flush()
+                os.fsync(target.fileno())
+        except FileExistsError:
+            raise
+        except BaseException:
+            dest_path.unlink(missing_ok=True)
+            raise
+        shutil.copystat(source_path, dest_path)
+        source_path.unlink()
         return dest_path
     
     def get_relative_path(self, full_path: Path) -> str:

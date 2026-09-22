@@ -1,4 +1,4 @@
-from typing import TypedDict, Optional, Set
+from typing import TypedDict, Optional, Set, NotRequired
 from datetime import datetime
 
 from domain.enums import WorkflowStatus
@@ -50,6 +50,10 @@ class ReceiptWorkflowState(TypedDict):
     # ===== OUTPUT (Notion-Ready) =====
     expense_summary: Optional[ExpenseSummary]  # Final data for Notion API
     
+    duplicate_expense_id: NotRequired[str]  # Existing Notion entry found during ingestion
+    submission_token: NotRequired[str]  # Stable identity for non-file callers on resume
+    submission_id: NotRequired[str]  # Durable journal key for recovery
+
     # ===== RESULTS =====
     results: Optional[WorkflowResults]  # Structured results including Notion IDs, archive path, and timing
     failure_reason: Optional[str]  # Error message if workflow failed

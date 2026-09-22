@@ -10,6 +10,7 @@ from domain.models.workflow import ReviewData, ValidationIssue
 from domain.models.expense import ExpenseSummary, SplitDetail
 from config import Config
 from services.ui import ExpenseUI, OVERRIDE_SENTINEL, SKIP_SENTINEL
+from services.split_titles import generate_split_title
 from logger import get_logger
 
 logger = get_logger(__name__)
@@ -272,12 +273,9 @@ def review_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
         if use_split:
             split_person = Config.PARTNER_NAME if paid_by == Config.YOUR_NAME else Config.YOUR_NAME
 
-            if "(" in final_merchant_description and ")" in final_merchant_description:
-                vendor_part = final_merchant_description.split("(")[0].strip()
-                summary_part = final_merchant_description.split("(")[1].split(")")[0].strip()
-                split_title = f"{split_person}'s {vendor_part} Split ({summary_part})"
-            else:
-                split_title = f"{split_person}'s {final_merchant_description} Split"
+            vendor_part = final_merchant_description.split("(")[0].strip()
+            split_title = generate_split_title(
+                split_person, vendor_part, final_merchant_description, final_date)
 
             splits = [
                 SplitDetail(

@@ -67,3 +67,6 @@ AGENTS.md
 CLAUDE.md
 .bob/skills/git-commit/SKILL.md
 .bob/skills/karpathy-guidelines/SKILL.md
+
+# Durable local submission recovery data
+.submission-state/

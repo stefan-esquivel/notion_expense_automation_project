@@ -8,7 +8,7 @@ from logger import get_logger
 
 logger = get_logger(__name__)
 
-# Confidence score thresholds used for logging/downstream routing
+# Confidence score thresholds used for logging
 CONFIDENCE_HIGH = 0.85
 CONFIDENCE_MEDIUM_LOW = 0.60
 
@@ -33,9 +33,11 @@ def enrich_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
     4. Stores enriched data in state
 
     Confidence bands:
-        ≥ 0.85  → high   (auto-commit eligible)
-        0.60–0.84 → medium (routed to review)
-        < 0.60  → low    (routed to review, flagged in validate)
+        ≥ 0.85  → high
+        0.60–0.84 → medium
+        < 0.60  → low    (flagged in validate)
+
+    All confidence bands still pass through review and revalidation.
 
     Args:
         state: Current workflow state with receipt data

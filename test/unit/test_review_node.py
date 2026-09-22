@@ -310,8 +310,8 @@ class TestReviewNode:
         
         result = review_node(valid_state)
         
-        # Split should be: "Jane's Walmart Order Split (Groceries)"
-        assert result["expense_summary"].splits[0].title == "Jane Doe's Walmart Order Split (Groceries)"
+        # Split should be: "Jane's Walmart Food Split (Groceries)"
+        assert result["expense_summary"].splits[0].title == "Jane Doe's Walmart Food Split (Groceries)"
     
     def test_review_node_split_title_without_summary(self, valid_state, mock_config, mock_ui):
         """Test split title generation when description has no summary."""
@@ -328,8 +328,8 @@ class TestReviewNode:
         
         result = review_node(valid_state)
         
-        # Split should be: "Jane's Walmart Order Split"
-        assert result["expense_summary"].splits[0].title == "Jane Doe's Walmart Order Split"
+        # Split should be: "Jane's Walmart Food Split"
+        assert result["expense_summary"].splits[0].title == "Jane Doe's Walmart Food Split"
     
     def test_review_node_generates_receipt_filename(self, valid_state, mock_config, mock_ui):
         """Test that receipt filename is properly generated."""

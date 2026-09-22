@@ -1,5 +1,7 @@
 from config import Config
 from services.ui import ExpenseUI
+from services.pdf_extractor import PDFExtractor
+from services.submission_journal import SubmissionJournal, file_sha256, submission_scope
 from workflows.langgraph.state import ReceiptWorkflowState
 from domain.enums import WorkflowStatus
 from pathlib import Path
@@ -15,7 +17,8 @@ def ingest_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
     This is the entry point of the workflow that:
     1. Updates status to INGESTING
     2. Validates the workflow_input
-    3. Prepares the state for extraction
+    3. Skips completed duplicates before parsing or review
+    4. Populates raw text for extraction
     """
 
     state["status"] = WorkflowStatus.INGESTING
@@ -44,8 +47,26 @@ def ingest_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
         state["failure_reason"] = f"File does not exist: {workflow_input.file_path}"
         return state
     
-    # raw_text is already populated by create_initial_state() before the
-    # graph starts, so there's nothing left to extract here.
+    try:
+        if not Config.QA_SKIP_COMMIT:
+            scope = submission_scope(Config.ENVIRONMENT, Config.EXPENSE_TABLE_DATABASE_ID,
+                                     Config.SPLIT_DETAILS_DATABASE_ID)
+            existing_id = SubmissionJournal(Config.SUBMISSION_JOURNAL_PATH).find_completed(
+                scope, file_sha256(file_path))
+            if existing_id:
+                state["status"] = WorkflowStatus.DUPLICATE
+                state["duplicate_expense_id"] = existing_id
+                state["failure_reason"] = None
+                logger.info(f"Already submitted; skipping {file_path.name} (Notion page: {existing_id})")
+                return state
+        if not workflow_input.raw_text:
+            workflow_input.raw_text = PDFExtractor().extract_text(file_path)
+    except Exception as error:
+        state["status"] = WorkflowStatus.FAILED
+        state["failure_reason"] = f"Ingestion failed: {error}"
+        logger.error(state["failure_reason"])
+        return state
+
     ui.display_processing(workflow_input.file_path)
 
     # Log ingestion

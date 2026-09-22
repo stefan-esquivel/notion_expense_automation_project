@@ -1,10 +1,8 @@
 
-from pathlib import Path
 from langgraph.graph import StateGraph, END
 
 from domain.enums import Sources, WorkflowStatus
 from domain.models.workflow import WorkflowInput
-from services.pdf_extractor import PDFExtractor
 from workflows.langgraph.nodes.ingest_node import ingest_node
 from workflows.langgraph.nodes.extract_node import extract_node
 from workflows.langgraph.nodes.scan_node import scan_node
@@ -81,7 +79,11 @@ def build_graph():
 
     graph.set_entry_point("ingest")
 
-    graph.add_conditional_edges("ingest", _route_or_end("extract"), {"continue": "extract", "failed": END})
+    graph.add_conditional_edges(
+        "ingest", lambda state: "stop" if state.get("status") in
+        (WorkflowStatus.FAILED, WorkflowStatus.DUPLICATE) else "continue",
+        {"continue": "extract", "stop": END},
+    )
 
     graph.add_conditional_edges("extract", _route_or_end("scan"), {"continue": "scan", "failed": END})
 
@@ -119,15 +121,10 @@ def build_graph():
 def create_initial_state(pdf_path: str, source: Sources = Sources.LOCAL_FOLDER) -> ReceiptWorkflowState:
     """Create initial workflow state from a PDF file path."""
     
-    # Extract raw text
-    extractor = PDFExtractor()
-    raw_text = extractor.extract_text(Path(pdf_path))
-    
     # Create workflow input
     workflow_input = WorkflowInput(
         source=source,
-        file_path=pdf_path,
-        raw_text=raw_text
+        file_path=pdf_path
     )
     
     # Return initial state

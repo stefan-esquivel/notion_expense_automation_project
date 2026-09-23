@@ -10,6 +10,8 @@ rich==15.0.0
 inquirer==3.4.1
 python-dotenv==1.2.3
 langgraph==1.2.12
+# Explicit serializer allowlist avoids the older checkpoint import warning.
+langgraph-checkpoint==4.2.0
 openai==3.18.0
 pydantic==2.13.5
 httpx==0.28.1

@@ -1,23 +1,16 @@
-# PDF Processing
-pdfplumber==0.11.0
-PyPDF2==3.0.1
-
-# Notion API
+# Direct dependencies pinned to the release verification environment.
+# Upgrade deliberately and rerun unit/integration tests and pip-audit.
+# Notion stays on 2.2.1: later SDK defaults change the database API contract;
+# 3.x also changes error/transport interfaces used by safe submission retries.
+# See docs/RELEASE_VERIFICATION.md for compatibility evidence.
+pdfplumber==0.11.10
 notion-client==2.2.1
-
-# Date/Time Parsing
 python-dateutil==2.9.0.post0
-
-# CLI Interface
-rich>=14.2.0
-inquirer==3.2.4
-
-# Utilities
-python-dotenv==1.0.0
-
-#LLM Workflow
-langgraph>=1.2.0
-langchain>=1.4.0
-langchain-openai>=0.3.0
-openai>=1.0.0
-pydantic>=2.0.0
+rich==15.0.0
+inquirer==3.4.1
+python-dotenv==1.2.3
+langgraph==1.2.12
+openai==3.18.0
+pydantic==2.13.5
+httpx==0.28.1
+requests==2.34.2

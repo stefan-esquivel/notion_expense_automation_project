@@ -1,7 +1,7 @@
 """High-level receipt extraction functions using LLM client."""
 
 import re
-from typing import Dict, Any, Optional
+from typing import Optional
 from datetime import datetime
 
 from llm.client import ReceiptLLMClient

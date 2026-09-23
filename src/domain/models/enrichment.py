@@ -1,41 +1,14 @@
 from pydantic import BaseModel, Field
 from typing import Optional
-from datetime import datetime
 
 
 class EnrichedReceipt(BaseModel):
-    """Enriched receipt data after AI processing and normalization.
-    
-    This model represents the receipt after:
-    - Merchant name normalization
-    - Date parsing
-    - Categorization
-    - Summarization (grocery items, recipe suggestions)
-    """
-    
-    # Normalized merchant information
-    # normalized_merchant: str = Field(
-    #     description="Standardized merchant name (e.g., 'Walmart' instead of 'WALMART SUPERCENTER #1234')"
-    # )
+    """Merchant category, confidence and notes from LLM or keyword enrichment."""
+
     merchant_category: str = Field(
         description="Category of merchant: 'grocery', 'utility', 'subscription', 'retail', etc."
     )
 
-    '''
-    I think we can wait on this for now
-    '''
-    
-    # Parsed temporal data 
-    # parsed_date: datetime = Field(
-    #     description="Properly parsed datetime from receipt"
-    # )
-    
-    # # AI-generated summaries (enrichment phase)
-    # grocery_summary: Optional[str] = Field(
-    #     default=None,
-    #     description="Human-readable summary of grocery items (e.g., 'Shrimp, Vegetables, Dairy')"
-    # )
-    
     # Confidence metrics
     confidence_score: float = Field(
         default=1.0,

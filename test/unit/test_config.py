@@ -3,8 +3,7 @@ Unit tests for config.py
 Tests configuration loading and validation without external dependencies.
 """
 import pytest
-from unittest.mock import patch, MagicMock
-import os
+from unittest.mock import patch
 from pathlib import Path
 import tempfile
 import shutil
@@ -238,8 +237,8 @@ class TestConfig:
         assert isinstance(Config.PARTNER_NAME, str)
         assert isinstance(Config.YOUR_EMOJI, str)
         assert isinstance(Config.PARTNER_EMOJI, str)
-        assert isinstance(Config.YOUR_USER_ID, str)
-        assert isinstance(Config.PARTNER_USER_ID, str)
+        assert Config.YOUR_USER_ID is None or isinstance(Config.YOUR_USER_ID, str)
+        assert Config.PARTNER_USER_ID is None or isinstance(Config.PARTNER_USER_ID, str)
         assert isinstance(Config.EXPENSE_RELATION_PROPERTY, str)
         assert isinstance(Config.SPLIT_RELATION_PROPERTY, str)
     

@@ -76,7 +76,6 @@ def extract_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
         extracted_data = extractor.parse_receipt(
             file_path, raw_text=state["workflow_input"].raw_text
         )
-        logger.debug(f"Extracted {len(extracted_data.get('items', []))} items")
 
         receipt = _build_receipt(extracted_data)
         state["receipt"] = receipt

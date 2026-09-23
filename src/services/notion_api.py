@@ -1,9 +1,9 @@
 """Notion API integration module."""
-from httpx._models import Response
+from httpx import Response
 
 
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Optional
 from pathlib import Path
 import time
 import httpx

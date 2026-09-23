@@ -4,9 +4,6 @@ Tests the complete flow with REAL Notion API calls.
 Requires test Notion databases and NOTION_TEST_TOKEN.
 """
 import pytest
-from pathlib import Path
-import os
-from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
@@ -212,4 +209,3 @@ class TestNotionDatabaseSchema:
         # 3. Verify property types are correct
         pass
 
-# Made with Bob

@@ -3,8 +3,6 @@ Unit tests for file_organizer.py
 Tests file organization logic with mocked filesystem operations.
 """
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from pathlib import Path
 from datetime import datetime
 from src.services.file_organizer import FileOrganizer
 

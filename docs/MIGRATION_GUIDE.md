@@ -8,8 +8,8 @@
    revert removes architecture work. No historical Notion data migration is
    performed by this upgrade.
 3. Use Python 3.11+ on macOS/Linux and install `requirements.txt` in a virtual
-   environment. For tests also install `requirements-dev.txt`. No dependency
-   upgrades are required by this documentation/test change.
+   environment after upgrading pip (`python -m pip install --upgrade pip`). For tests also install `requirements-dev.txt`. Install the pinned release requirements when upgrading; see
+   [release verification](RELEASE_VERIFICATION.md) for the Notion SDK compatibility pin.
 4. Compare `.env.example` with your configuration without overwriting credentials.
    Keep token, expense/split database IDs, `BALANCES_PAGE_ID`, name aliases and
    Notion person IDs. Add `OPENAI_API_KEY` for LLM-assisted processing. Missing LLM

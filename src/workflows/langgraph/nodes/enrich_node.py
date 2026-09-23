@@ -3,7 +3,7 @@
 
 from workflows.langgraph.state import ReceiptWorkflowState
 from domain.enums import WorkflowStatus
-from llm.receipt_extractor import llm_enrich_receipt, keyword_enrich_receipt, FALLBACK_CONFIDENCE
+from llm.receipt_extractor import llm_enrich_receipt, keyword_enrich_receipt
 from logger import get_logger
 
 logger = get_logger(__name__)

@@ -1,9 +1,7 @@
 """Unit tests for ingest_node.py"""
 
 import pytest
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
-from datetime import datetime
+from unittest.mock import Mock, patch
 import sys
 import os
 

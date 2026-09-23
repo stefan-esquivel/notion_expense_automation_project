@@ -1,7 +1,6 @@
 """OpenAI client wrapper for receipt processing."""
 
 import json
-import os
 import time
 from typing import Optional, Dict, Any
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI, RateLimitError

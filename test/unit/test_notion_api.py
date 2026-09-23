@@ -17,6 +17,17 @@ from src.services.notion_api import NotionExpenseClient
 from src.config import Config
 
 
+@pytest.fixture(autouse=True)
+def synthetic_people(monkeypatch):
+    """Payload tests must not depend on a developer's .env file."""
+    from config import Config as runtime_config
+    for config in (Config, runtime_config):
+        monkeypatch.setattr(config, 'YOUR_NAME', 'Alex')
+        monkeypatch.setattr(config, 'PARTNER_NAME', 'Sam')
+        monkeypatch.setattr(config, 'YOUR_USER_ID', 'synthetic-alex-id')
+        monkeypatch.setattr(config, 'PARTNER_USER_ID', 'synthetic-sam-id')
+
+
 @pytest.fixture
 def notion_client():
     """Create a NotionExpenseClient instance with mocked Notion client and config"""
@@ -39,10 +50,7 @@ def notion_client():
                                 'Bob': 'user-id-bob'
                             }
                             yield client
-from pathlib import Path
 
-from src.services.notion_api import NotionExpenseClient
-from src.config import Config
 
 
 @pytest.mark.unit

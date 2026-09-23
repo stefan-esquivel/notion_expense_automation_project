@@ -15,7 +15,7 @@ Scenarios
 """
 
 import pytest
-from unittest.mock import patch, Mock
+from unittest.mock import patch
 import sys
 import os
 

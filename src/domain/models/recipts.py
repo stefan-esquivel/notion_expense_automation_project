@@ -1,5 +1,4 @@
 
-from uuid import UUID
 from typing import List, Optional
 from pydantic import BaseModel, Field
 from domain.models.receipt_item import ReceiptItem
@@ -11,9 +10,6 @@ class Receipt(BaseModel):
     This model represents the initial extraction phase before any AI processing
     or normalization. Data may be messy and require cleaning/validation.
     """
-    '''
-    may convert to uuid
-    '''
     recipt_id: Optional[str] = Field(
         default=None,
         description="Unique identifier for this receipt (order ID from merchant, or None if not available)"

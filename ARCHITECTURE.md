@@ -1,356 +1,119 @@
-# System Architecture
+# System architecture
 
-## Overview
+`src/main.py` builds the LangGraph application and invokes it once per input PDF.
+The CLI validates configuration, checks Notion connectivity, scans the configured
+input directory and reports successes, duplicate skips and failures separately.
+There is one execution path; no legacy/parallel workflow switch is implemented.
 
-The Notion Expense Automation system is a Python-based application that automates the process of tracking expenses from PDF receipts to Notion database entries.
+## Graph
 
-## Architecture Diagram
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        USER INTERACTION                          │
-│                                                                   │
-│  1. Place PDF receipts in receipts/input/                       │
-│  2. Run: python src/main.py                                      │
-│  3. Review and confirm extracted data                            │
-│  4. Select who paid                                              │
-│  5. Confirm split details                                        │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                         MAIN APPLICATION                         │
-│                         (src/main.py)                            │
-│                                                                   │
-│  • Orchestrates entire workflow                                  │
-│  • Validates configuration                                       │
-│  • Tests Notion connection                                       │
-│  • Processes each receipt sequentially                           │
-│  • Handles errors and logging                                    │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-        ┌─────────────────────┴─────────────────────┐
-        │                                             │
-        ▼                                             ▼
-┌──────────────────┐                      ┌──────────────────────┐
-│  PDF EXTRACTOR   │                      │   USER INTERFACE     │
-│ (pdf_extractor)  │                      │      (ui.py)         │
-│                  │                      │                      │
-│ • Extract text   │                      │ • Display info       │
-│ • Detect merchant│                      │ • Edit prompts       │
-│ • Parse amount   │                      │ • Payer selection    │
-│ • Parse date     │                      │ • Split confirmation │
-│ • Categorize     │                      │ • Final preview      │
-└──────────────────┘                      └──────────────────────┘
-        │                                             │
-        └─────────────────────┬─────────────────────┘
-                              ▼
-                    ┌──────────────────┐
-                    │  FILE ORGANIZER  │
-                    │ (file_organizer) │
-                    │                  │
-                    │ • Generate name  │
-                    │ • Create folders │
-                    │ • Move files     │
-                    │ • Month structure│
-                    └──────────────────┘
-                              │
-                              ▼
-                    ┌──────────────────┐
-                    │  NOTION CLIENT   │
-                    │ (notion_client)  │
-                    │                  │
-                    │ • Create expense │
-                    │ • Create split   │
-                    │ • Link entries   │
-                    │ • Generate titles│
-                    └──────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                         NOTION API                               │
-│                                                                   │
-│  ┌──────────────────┐   Relation   ┌──────────────────────┐    │
-│  │  Expense Table   │◄─────────────┤  Split Details Table │    │
-│  │                  │              │                      │    │
-│  │ • Merchant       │              │ • Title              │    │
-│  │ • Date           │              │ • Person (owes)      │    │
-│  │ • Amount         │              │ • Share Amount       │    │
-│  │ • Paid By        │              │ • Share Percent      │    │
-│  │ • Receipt        │              └──────────┬───────────┘    │
-│  └──────────────────┘                         │ Relation        │
-│                                               ▼                  │
-│                                  ┌──────────────────────┐       │
-│                                  │   Balances Table     │       │
-│                                  │  (single page/row)   │       │
-│                                  │                      │       │
-│                                  │ • Running totals     │       │
-│                                  │ • Linked splits      │       │
-│                                  └──────────────────────┘       │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      FILE SYSTEM OUTPUT                          │
-│                                                                   │
-│  receipts/processed/                                             │
-│  ├── 2026-01/                                                    │
-│  │   ├── 2026-01-18_Walmart_Order_Shrimp_$97.08.pdf            │
-│  │   ├── 2026-01-19_Amazon_Order_Scale_$32.53.pdf              │
-│  │   └── 2026-01-25_Electrical_Bill_$131.36.pdf                │
-│  └── 2026-02/                                                    │
-│      ├── 2026-02-01_Walmart_Food_Order_Basics_$44.58.pdf       │
-│      └── 2026-02-09_Parking_$300.00.pdf                         │
-│                                                                   │
-│  logs/                                                           │
-│  └── expense_automation_20260214.log                            │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    START --> ingest
+    ingest -->|valid, not duplicate| extract
+    ingest -->|failed or duplicate| END
+    extract -->|success| scan
+    extract -->|failed| END
+    scan -->|missing fields| augment
+    scan -->|complete| enrich
+    scan -->|failed| END
+    augment -->|success| enrich
+    augment -->|failed| END
+    enrich -->|success| validate
+    enrich -->|failed| END
+    validate -->|success, including GREEN| review
+    validate -->|failed| END
+    review -->|approved| revalidate
+    review -->|failed or cancelled| END
+    revalidate -->|unresolved issues| review
+    revalidate -->|GREEN with acknowledgements| commit
+    revalidate -->|failed| END
+    commit -->|completed or failed| END
 ```
 
-## Component Details
+The editable [draw.io diagram](docs/diagrams/langgraph-state-machine.drawio)
+represents the same graph. `revalidate` calls the same function as `validate`
+and persists its result before routing. Confidence alone never bypasses review.
+Archiving is part of commit, not a separate graph node. Nodes perform I/O and
+mutate state; they are not pure functions or durable graph checkpoints.
 
-### 1. Configuration Module (`src/config.py`)
-**Purpose**: Centralized configuration management
+## Components and state
 
-**Responsibilities**:
-- Load environment variables from `.env`
-- Validate required configuration
-- Provide configuration constants to other modules
-- Create necessary directories
+| Component | Responsibility |
+| --- | --- |
+| `src/config.py` | Environment loading, paths, IDs, aliases and configuration validation |
+| `src/domain/models/` | Pydantic receipt, enrichment, validation, review, expense and result models |
+| `src/services/pdf_extractor.py` | Text extraction and deterministic merchant/date/amount parsing, optional LLM items |
+| `src/llm/` | OpenAI calls, prompts, model conversion and keyword fallback |
+| `src/services/ui.py` | Interactive corrections, acknowledgements, payer and split selection |
+| `src/services/notion_api.py` | Expense/split creation, receipt upload and relation linking |
+| `src/services/notion_retry.py` | Bounded retry policy for eligible Notion operations |
+| `src/services/submission_journal.py` | Durable operation IDs, uncertainty tracking, identity and local locking |
+| `src/services/file_organizer.py` | Destination planning and file moves |
+| `src/workflows/langgraph/graph.py` | Node registration and routing |
 
-**Key Configuration**:
-- Notion API credentials
-- Database IDs (`EXPENSE_TABLE_DATABASE_ID`, `SPLIT_DETAILS_DATABASE_ID`, `BALANCES_DATABASE_ID`)
-- Balances page ID (`BALANCES_PAGE_ID`) — the single row in the Balances table
-- User name aliases (`YOUR_NAME`, `PARTNER_NAME`) — must match Notion field values exactly
-- Folder paths
-- Split percentage
+`ReceiptWorkflowState` is a TypedDict containing Pydantic values. `workflow_input`
+holds source, file path and raw text; there are no top-level `file_path` or
+`raw_text` fields. The extraction model is in `domain/models/recipts.py` (the
+existing spelling), with line items in `receipt_item.py`.
 
-### 2. PDF Extractor (`src/pdf_extractor.py`)
-**Purpose**: Extract and parse information from PDF receipts
+State carries `status`, `receipt`, `scan_results`, `augment_results`,
+`enriched_receipt`, `validation_result`, `acknowledged_warnings`, `review_data`,
+`expense_summary`, `results` and `failure_reason`. Optional `duplicate_expense_id`,
+`submission_id` and `submission_token` support duplicate reporting and recovery.
+The status enum is one field in this state, not the state itself.
 
-**Responsibilities**:
-- Extract text from PDF files using pdfplumber
-- Detect merchant type using regex patterns
-- Parse monetary amounts
-- Extract dates in various formats
-- Identify item descriptions
-- Generate descriptive names
+## Processing behavior
 
-**Supported Merchants**:
-- Walmart (groceries, delivery)
-- Amazon (online orders)
-- Utilities (electrical, hydro)
-- Rent, Netflix, YouTube, Parking, TV, Longo's
+1. **Ingest:** validate input, check journal identity, then extract PDF text into
+   `workflow_input.raw_text`. Completed duplicates terminate before extraction/review.
+2. **Extract:** parse a receipt with LLM item extraction enabled. Missing or
+   nonpositive amounts fail here; missing dates can proceed to scan.
+3. **Scan/augment:** inspect required fields and, if missing, attempt LLM recovery
+   from raw text. Unfilled values remain available for validation/review.
+4. **Enrich:** categorize using OpenAI; failures fall back to keyword matching at
+   confidence 0.5. Vendor `Unknown` skips enrichment.
+5. **Validate/review/revalidate:** RED findings require correction or explicit
+   override, YELLOW findings require acknowledgement. Review collects approved
+   output and updates the receipt. Revalidation persists fresh findings; all
+   issue keys must be resolved or acknowledged before commit.
+6. **Commit:** journal expense creation, split creation and relation linking;
+   archive only after those operations succeed. Return Notion IDs and archive
+   path in `WorkflowResults`, or FAILED with a reason.
 
-### 3. File Organizer (`src/file_organizer.py`)
-**Purpose**: Organize and rename receipt files
+Split titles use `services/split_titles.py` for preview and submission. The
+nonpayer's share is stored as a percentage; the Notion schema supplies rollups.
+File organization uses `processed/YYYY/MMM/vendor/`, with sanitized filenames and
+collision handling.
 
-**Responsibilities**:
-- Generate descriptive filenames
-- Create monthly folder structure
-- Move files from input to processed
-- Handle duplicate filenames
-- Sanitize filenames for filesystem
+## Persistence and failure boundaries
 
-**Naming Pattern**:
-```
-YYYY-MM-DD_Merchant_Description_$Amount.pdf
-```
+Failures terminate the graph rather than entering a separate failure node.
+Cancellation/declined confirmation is represented as FAILED. `main.py` also catches
+unexpected invocation errors. A completed graph result is not a durable checkpoint:
+the SQLite journal records submission operations, not all graph state.
 
-### 4. Notion Client (`src/notion_api.py`)
-**Purpose**: Interface with Notion API
+Identity is PDF SHA-256 plus environment and target expense/split database IDs.
+The journal preserves approved payloads and known Notion IDs; uncertain page
+creation blocks automatic recreation. Locking coordinates processes using the
+same local journal only. Historical/manual Notion entries and re-encoded PDFs are
+outside this duplicate protection. See [submission recovery](docs/SUBMISSION_RECOVERY.md)
+for reconciliation and the distinction between full CLI duplicate skips and
+direct commit archive recovery.
 
-**Responsibilities**:
-- Create expense table entries
-- Create split details entries
-- Link pages via relations using the generic `_link_pages(source, target, property_name)` method
-- Link split entries to their parent expense entry (`"Split Details Table"` relation)
-- Link split entries to the single Balances page (`"Split Details Table"` relation on the balance page)
-- Generate split titles following naming patterns
-- Test API connection
-- Handle API errors
+`QA_SKIP_COMMIT` returns synthetic completion results without writes/moves, but
+CLI connectivity checks and possible LLM calls remain. Configuration loading and
+commands are documented in the [README](README.md).
 
-**Key Design — `_link_pages()`**:
-- Generic method: takes `source_page_id`, `target_page_id`, and `table_name` (the relation property name)
-- Fetches existing relations first to avoid overwriting them (append-safe)
-- Deduplicates before updating
-- Used for both expense→split and balance→split links
+## External services and verification
 
-**Split Title Patterns** (uses name aliases from `YOUR_NAME` / `PARTNER_NAME`):
-- Food: `"[Alias]'s Walmart Food Split (Item)"`
-- Bills: `"[Alias]'s Electrical Bill Split (Month)"`
-- Subscriptions: `"[Alias]'s Netflix Payment (Month)"`
+PDF parsing and journal storage are local. OpenAI can receive raw receipt text,
+items and metadata; Notion receives approved expense/split data and best-effort
+receipt uploads. A missing LLM key does not disable deterministic parsing or
+human review. See [LLM behavior](src/llm/README.md).
 
-### 5. User Interface (`src/ui.py`)
-**Purpose**: Handle all user interactions
-
-**Responsibilities**:
-- Display extracted information in tables
-- Prompt for edits and confirmations
-- Select who paid (you or partner)
-- Confirm split amounts
-- Show final preview before sending
-- Display success/error messages
-- Beautiful CLI using Rich library
-
-**Interactive Features**:
-- Editable fields (description, amount, date)
-- Payer selection menu
-- Split customization (50/50, custom, or no split)
-- Final confirmation before Notion submission
-
-### 6. Main Application (`src/main.py`)
-**Purpose**: Orchestrate the entire workflow
-
-**Workflow Steps**:
-1. Validate configuration
-2. Test Notion API connection
-3. Scan input folder for PDFs
-4. For each receipt:
-   - Extract information
-   - Review and edit
-   - Select payer
-   - Confirm split
-   - Preview final data
-   - Create Notion entries
-   - Organize file
-5. Display summary
-
-## Data Flow
-
-### Input
-```
-PDF Receipt → Text Extraction → Parsed Data
-```
-
-### Processing
-```
-Parsed Data → User Review → Confirmed Data → Notion Entries
-```
-
-### Output
-```
-1. Notion Expense Entry (with receipt filename)
-2. Notion Split Entry (linked to expense)
-3. Organized PDF file (in monthly folder)
-4. Log entry (for audit trail)
-```
-
-## Split Logic
-
-### Scenario: YOU pay $100 at Walmart
-
-**Input**:
-- Amount: $100.00
-- Paid By: `YOU` (your alias from `YOUR_NAME`)
-
-**Processing**:
-- Calculate split: $100.00 × 50% = $50.00
-- Non-payer: `PARTNER` (your alias from `PARTNER_NAME`)
-
-**Output**:
-1. **Expense Entry**:
-   - Merchant: "Walmart Order"
-   - Amount: CA$100.00
-   - Paid By: `YOU`
-   - Linked to: Split entry (via `"Split Details Table"` relation)
-
-2. **Split Entry** (ONE entry only):
-   - Title: "`PARTNER`'s Walmart Food Split"
-   - Person: `PARTNER`
-   - Share Amount: CA$50.00
-   - Meaning: `PARTNER` owes `YOU` $50.00
-   - Linked to: Expense entry AND Balances page
-
-3. **Balances Page** (single row, updated):
-   - New split entry appended to `"Split Details Table"` relation
-
-## Error Handling
-
-### Configuration Errors
-- Missing `.env` file → Display setup instructions
-- Invalid API token → Test connection fails
-- Missing database IDs → Validation error
-
-### Processing Errors
-- PDF extraction fails → Log error, skip file
-- Amount/date not found → Prompt user to enter manually
-- Notion API error → Log error, don't move file
-
-### Recovery
-- All errors logged to `logs/` folder
-- Failed receipts remain in input folder
-- User can retry after fixing issues
-
-## Security
-
-### Sensitive Data
-- `.env` file contains API tokens (gitignored)
-- Never commit credentials to version control
-- API token has limited scope (only connected databases)
-
-### Data Privacy
-- All processing happens locally
-- Only sends data to Notion (your workspace)
-- No third-party services involved
-
-## Performance
-
-### Scalability
-- Processes receipts sequentially (one at a time)
-- Suitable for personal use (dozens of receipts)
-- Can process batch of receipts in one run
-
-### Optimization
-- PDF text extraction is fast (<1 second per file)
-- Notion API calls are rate-limited by Notion
-- Interactive prompts allow user to control pace
-
-## Future Enhancements
-
-Potential improvements:
-1. OCR for image receipts (not just PDFs)
-2. Email integration (auto-download attachments)
-3. Machine learning for better categorization
-4. Batch approval mode (review all, then submit)
-5. Web interface instead of CLI
-6. Mobile app integration
-7. Receipt photo capture from phone
-
-## Technology Stack
-
-- **Language**: Python 3.8+
-- **PDF Processing**: pdfplumber, PyPDF2
-- **API Client**: notion-client
-- **CLI Interface**: rich, inquirer
-- **Date Parsing**: python-dateutil
-- **Configuration**: python-dotenv
-- **Logging**: Python logging module
-
-## File Structure
-
-```
-notion_expense_automation_project/
-├── src/                    # Source code
-│   ├── __init__.py
-│   ├── main.py            # Entry point
-│   ├── config.py          # Configuration
-│   ├── pdf_extractor.py   # PDF processing
-│   ├── file_organizer.py  # File management
-│   ├── notion_client.py   # Notion API
-│   └── ui.py              # User interface
-├── receipts/
-│   ├── input/             # New receipts
-│   └── processed/         # Organized receipts
-├── logs/                  # Application logs
-├── examples/              # Sample CSV exports
-├── requirements.txt       # Dependencies
-├── .env.example          # Config template
-├── .env                  # Your config (gitignored)
-├── .gitignore            # Git ignore rules
-├── README.md             # User documentation
-├── SETUP_GUIDE.md        # Setup instructions
-├── ARCHITECTURE.md       # This file
-└── run.sh                # Quick start script
+[Verification results](docs/WORKFLOW_VERIFICATION.md) map unit/integration tests to
+actual behavior. Those tests mock Notion and LLM calls, use temporary journal and
+archive paths, and reuse representative PDF fixtures. Live QA is tracked in #57.
+Gmail ingestion, folder watching and trigger orchestration are deferred under #25;
+a source enum value does not implement a trigger.

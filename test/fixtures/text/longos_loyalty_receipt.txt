@@ -1,0 +1,77 @@
+2026-09-19, 10:30 PM  Electronic Receipt 738841
+Page 1 of 2
+
+test.user@example.com
+
+Electronic Receipt 738841
+1 message
+
+Longos <receipts@longos.com>  Sat, Sep 19, 2026 at 6:00 PM
+To: test.user@example.com
+
+Longos MLS 000-000-0000
+Your Store Manager is J. Smith
+#000-000 09/19/2026 17:58:30
+Your Cashier Today was A. Jones
+Inv#:00000001 Trs#:738841
+HST# R000000000
+ PRODUCE
+2 @ $2.50 each
+ENGLISH CUCUMBERS LG          $5.00
+DILL WEED                $1.99      SALE
+LONGO GRAPE TOM 600G     $4.99      SALE
+CONCORD GRAPES           $4.99      SALE
+ MEAT
+PRIME RWA CHICKEN TH         $36.95
+ BAKERY
+2 @ $2.99 each
+LONGOS GARLIC NAAN            $5.98
+Items Subtotal               $59.90
+Subtotal                     $59.90
+Total                        $59.90
+
+2026-09-19, 10:30 PM  Electronic Receipt 738841
+Page 2 of 2
+
+TOTAL [Item count  8]        $59.90
+American express             $59.90
+ # ***********0000
+Total Savings Today 5.73%     $3.00
+Longo's Thank You Rewards   TYC #0000
+Week of 09/14/2026
+Base points earned                    30
+Bonus points earned                    0
+Total spent                      $103.01
+Points Redeemed today                  0
+Total points available              2205
+000000000000
+Thank you
+LONGO'S
+--------------------------------------
+
+
+Sep 19 2026  05:59 pm      Trans# 738841
+
+           TRANSACTION RECORD
+
+Card         : ***********0000
+A000000025010901
+Card Type    : AM (American Express)
+AMERICAN EXPRESS
+Trans Type   : PURCHASE
+Card Entry   : RF
+Auth #       : 000000
+Sequence #   : 000000000
+Date         : 26/09/19
+Time         : 17:59:56
+
+Amount       : $59.90
+
+        00  APPROVED - THANK YOU
+
+       Retain this copy for your
+                records
+         *** CUSTOMER COPY ***
+
+----------------------------------------
+AuthID: 0000000000

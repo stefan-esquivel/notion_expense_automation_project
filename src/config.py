@@ -4,7 +4,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Load environment variables
-from pathlib import Path
 
 env = os.getenv('APP_ENV', '').lower()
 if env == 'qa':
@@ -27,7 +26,7 @@ else:
     load_dotenv()
     print("✓ Loaded LOCAL environment")
 
-# After the if/elif/else block
+# Journal scope uses local for the default development environment.
 CURRENT_ENV = env if env in ['qa', 'prod'] else 'local'
 
 class Config:
@@ -35,11 +34,17 @@ class Config:
     # Environment tracking
     ENVIRONMENT = CURRENT_ENV
     
+    # QA Mode - Skip Notion commits and file moving for testing
+    QA_SKIP_COMMIT = os.getenv('QA_SKIP_COMMIT', 'false').lower() == 'true'
+    
     # Notion API
     NOTION_API_TOKEN = os.getenv('NOTION_API_TOKEN')
     EXPENSE_TABLE_DATABASE_ID = os.getenv('EXPENSE_TABLE_DATABASE_ID')
     SPLIT_DETAILS_DATABASE_ID = os.getenv('SPLIT_DETAILS_DATABASE_ID')
     BALANCES_PAGE_ID = os.getenv('BALANCES_PAGE_ID')
+    
+    # OpenAI API
+    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
     
     # User Configuration
     YOUR_NAME = os.getenv('YOUR_NAME', 'You')
@@ -54,6 +59,7 @@ class Config:
     INPUT_FOLDER = PROJECT_ROOT / os.getenv('INPUT_FOLDER', 'receipts/input')
     PROCESSED_FOLDER = PROJECT_ROOT / os.getenv('PROCESSED_FOLDER', 'receipts/processed')
     LOG_FOLDER = PROJECT_ROOT / 'logs'
+    SUBMISSION_JOURNAL_PATH = PROJECT_ROOT / '.submission-state' / 'journal.sqlite3'
     
     # Split Configuration
     DEFAULT_SPLIT_PERCENTAGE = float(os.getenv('DEFAULT_SPLIT_PERCENTAGE', '50.0'))

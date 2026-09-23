@@ -1,0 +1,103 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Receipt workflow" id="receipt-workflow">
+    <mxGraphModel grid="1" gridSize="10" page="1" pageWidth="1100" pageHeight="1600">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="start" parent="1" value="START" vertex="1" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;">
+          <mxGeometry x="400" y="30" width="240" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="ingest" parent="1" value="INGEST&#10;Validate input; journal duplicate check; extract text" vertex="1" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;">
+          <mxGeometry x="400" y="140" width="240" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="extract" parent="1" value="EXTRACT&#10;Parse receipt; missing/nonpositive amount fails" vertex="1" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;">
+          <mxGeometry x="400" y="280" width="240" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="scan" parent="1" value="SCAN&#10;Check required fields" vertex="1" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;">
+          <mxGeometry x="400" y="420" width="240" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="augment" parent="1" value="AUGMENT&#10;Attempt missing-field recovery" vertex="1" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;">
+          <mxGeometry x="60" y="560" width="240" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="enrich" parent="1" value="ENRICH&#10;LLM category or keyword fallback" vertex="1" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;">
+          <mxGeometry x="400" y="700" width="240" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="validate" parent="1" value="VALIDATE&#10;Persist issues and confidence" vertex="1" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;">
+          <mxGeometry x="400" y="840" width="240" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="review" parent="1" value="REVIEW&#10;Corrections/overrides; acknowledgements; confirm" vertex="1" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#fff2cc;strokeColor=#6c8ebf;fontSize=14;">
+          <mxGeometry x="400" y="980" width="240" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="revalidate" parent="1" value="REVALIDATE&#10;Persist fresh validation result" vertex="1" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;">
+          <mxGeometry x="400" y="1120" width="240" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="commit" parent="1" value="COMMIT&#10;Journal Notion writes/links, then archive" vertex="1" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;">
+          <mxGeometry x="400" y="1310" width="240" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="end" parent="1" value="END&#10;COMPLETED / FAILED / DUPLICATE" vertex="1" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;">
+          <mxGeometry x="800" y="700" width="240" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-0" parent="1" source="start" target="ingest" value="" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;labelBackgroundColor=#ffffff;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-1" parent="1" source="ingest" target="extract" value="continue" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;labelBackgroundColor=#ffffff;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-2" parent="1" source="ingest" target="end" value="FAILED or DUPLICATE" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;labelBackgroundColor=#ffffff;strokeColor=#b85450;dashed=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-3" parent="1" source="extract" target="scan" value="success" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;labelBackgroundColor=#ffffff;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-4" parent="1" source="scan" target="augment" value="missing fields" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;labelBackgroundColor=#ffffff;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-5" parent="1" source="scan" target="enrich" value="complete" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;labelBackgroundColor=#ffffff;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-6" parent="1" source="augment" target="enrich" value="success" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;labelBackgroundColor=#ffffff;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-7" parent="1" source="enrich" target="validate" value="success" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;labelBackgroundColor=#ffffff;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-8" parent="1" source="validate" target="review" value="always on success, including GREEN" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;labelBackgroundColor=#ffffff;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-9" parent="1" source="review" target="revalidate" value="approved" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;labelBackgroundColor=#ffffff;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-10" parent="1" source="revalidate" target="review" value="unresolved issues" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;labelBackgroundColor=#ffffff;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-11" parent="1" source="revalidate" target="commit" value="all issues resolved or acknowledged" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;labelBackgroundColor=#ffffff;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-12" parent="1" source="commit" target="end" value="COMPLETED or FAILED" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;labelBackgroundColor=#ffffff;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-13" parent="1" source="extract" target="end" value="FAILED" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;labelBackgroundColor=#ffffff;strokeColor=#b85450;dashed=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-14" parent="1" source="scan" target="end" value="FAILED" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;labelBackgroundColor=#ffffff;strokeColor=#b85450;dashed=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-15" parent="1" source="augment" target="end" value="FAILED" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;labelBackgroundColor=#ffffff;strokeColor=#b85450;dashed=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-16" parent="1" source="enrich" target="end" value="FAILED" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;labelBackgroundColor=#ffffff;strokeColor=#b85450;dashed=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-17" parent="1" source="validate" target="end" value="FAILED" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;labelBackgroundColor=#ffffff;strokeColor=#b85450;dashed=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-18" parent="1" source="review" target="end" value="FAILED" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;labelBackgroundColor=#ffffff;strokeColor=#b85450;dashed=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-19" parent="1" source="revalidate" target="end" value="FAILED" edge="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;endArrow=block;labelBackgroundColor=#ffffff;strokeColor=#b85450;dashed=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

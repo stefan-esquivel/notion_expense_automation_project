@@ -3,8 +3,7 @@ Unit tests for config.py
 Tests configuration loading and validation without external dependencies.
 """
 import pytest
-from unittest.mock import patch, MagicMock
-import os
+from unittest.mock import patch
 from pathlib import Path
 import tempfile
 import shutil
@@ -51,7 +50,7 @@ class TestConfig:
         
         # Check relation properties exist
         assert hasattr(Config, 'EXPENSE_RELATION_PROPERTY')
-        assert hasattr(Config, 'BALANCES_RELATION_PROPERTY')
+        assert hasattr(Config, 'SPLIT_RELATION_PROPERTY')
     
     def test_config_file_paths_are_path_objects(self):
         """Test that file paths are Path objects"""
@@ -74,7 +73,7 @@ class TestConfig:
         from src.config import Config
         
         assert Config.EXPENSE_RELATION_PROPERTY == "Split Details Table"
-        assert Config.BALANCES_RELATION_PROPERTY == "Split Details Table"
+        assert Config.SPLIT_RELATION_PROPERTY == "Expense Table"
     
     def test_config_project_root_is_correct(self):
         """Test that PROJECT_ROOT points to the correct directory"""
@@ -238,10 +237,10 @@ class TestConfig:
         assert isinstance(Config.PARTNER_NAME, str)
         assert isinstance(Config.YOUR_EMOJI, str)
         assert isinstance(Config.PARTNER_EMOJI, str)
-        assert isinstance(Config.YOUR_USER_ID, str)
-        assert isinstance(Config.PARTNER_USER_ID, str)
+        assert Config.YOUR_USER_ID is None or isinstance(Config.YOUR_USER_ID, str)
+        assert Config.PARTNER_USER_ID is None or isinstance(Config.PARTNER_USER_ID, str)
         assert isinstance(Config.EXPENSE_RELATION_PROPERTY, str)
-        assert isinstance(Config.BALANCES_RELATION_PROPERTY, str)
+        assert isinstance(Config.SPLIT_RELATION_PROPERTY, str)
     
     def test_config_validates_method_exists(self):
         """Test that Config has a validate classmethod"""

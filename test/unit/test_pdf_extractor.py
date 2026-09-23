@@ -3,10 +3,9 @@ Unit tests for pdf_extractor.py
 Tests PDF parsing logic with mocked file operations.
 """
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from datetime import datetime
+from unittest.mock import Mock, patch
 from pathlib import Path
-from src.pdf_extractor import PDFExtractor
+from src.services.pdf_extractor import PDFExtractor
 
 
 @pytest.fixture
@@ -49,11 +48,11 @@ class TestPDFExtractor:
         result = extractor.parse_receipt(pdf_path)
         
         assert result is not None
-        assert 'merchant_type' in result
         assert 'merchant_name' in result
         assert 'amount' in result
         assert 'date' in result
-        assert 'description' in result
+        assert 'summary' in result
+        assert 'items' in result
     
     def test_extract_date_yyyy_mm_dd_format(self, extractor):
         """Test date extraction from YYYY-MM-DD format"""
@@ -132,24 +131,61 @@ class TestPDFExtractor:
         """Test amount extraction when no amount is found"""
         text = "This text has no amount"
         amount = extractor.extract_amount(text)
-        
+
         assert amount is None
+
+    def test_extract_amount_ignores_loyalty_total_spent(self, extractor):
+        """Loyalty 'Total spent' should not override the transaction Total (issue #47)."""
+        text = (
+            "Subtotal                        $52.12\n"
+            "HST                              $7.78\n"
+            "Total                           $59.90\n"
+            "\n"
+            "Longo's Thank You Rewards\n"
+            "Total spent                    $103.01\n"
+            "Points earned                     1030\n"
+        )
+        amount = extractor.extract_amount(text)
+
+        assert amount == 59.90
+
+    def test_extract_amount_ignores_hold_line(self, extractor):
+        """Temporary hold lines should not override the transaction Total (issue #33 pattern)."""
+        text = (
+            "Subtotal                        $70.00\n"
+            "Tax                              $5.00\n"
+            "Total                           $75.00\n"
+            "Temporary hold                 $100.00\n"
+        )
+        amount = extractor.extract_amount(text)
+
+        assert amount == 75.00
+
+    def test_extract_amount_prefers_total_label_over_max(self, extractor):
+        """When a clean Total line exists, return its amount even if a larger amount appears elsewhere."""
+        text = (
+            "Total                           $49.99\n"
+            "Savings this visit             $200.00\n"
+        )
+        amount = extractor.extract_amount(text)
+
+        assert amount == 49.99
     
     def test_detect_merchant_walmart(self, extractor):
         """Test Walmart merchant detection"""
         text = "Order details - Walmart.ca"
-        merchant_type, merchant_name = extractor.detect_merchant(text)
-        
-        assert merchant_type == 'walmart'
-        assert merchant_name == 'Walmart Order'
-    
+        transaction_type, merchant_name = extractor.detect_merchant(text)
+
+        assert transaction_type == 'Order'
+        assert merchant_name == 'Walmart'
+
     def test_detect_merchant_amazon(self, extractor):
         """Test Amazon merchant detection"""
         text = "Amazon.com Order Receipt"
-        merchant_type, merchant_name = extractor.detect_merchant(text)
-        
-        assert merchant_type == 'amazon'
-        assert merchant_name == 'Amazon Order'
+        transaction_type, merchant_name = extractor.detect_merchant(text)
+
+        assert transaction_type == 'Order'
+        assert merchant_name == 'Amazon'
     
     def test_detect_merchant_unknown(self, extractor):
         """Test unknown merchant detection"""
@@ -162,51 +198,84 @@ class TestPDFExtractor:
     def test_extract_items_description_walmart(self, extractor):
         """Test item description extraction for Walmart"""
         text = "Chicken Breast\nBeef Ground\nSalmon Fillet"
-        description = extractor.extract_items_description(text, 'walmart')
+        items = extractor.extract_items(text)
         
-        assert 'Chicken' in description or 'Beef' in description or 'Salmon' in description
+        # When LLM is disabled (default), should return empty list
+        assert isinstance(items, list)
+        assert len(items) == 0
     
-    def test_extract_items_description_amazon(self, extractor):
-        """Test item description extraction for Amazon"""
-        text = "Kitchen Scale\nBaking Tray\nLED Bulbs"
-        description = extractor.extract_items_description(text, 'amazon')
+    def test_extract_items_with_llm_enabled(self):
+        """Test extracting items when LLM is enabled"""
         
-        assert 'Scale' in description or 'Tray' in description or 'Bulbs' in description
+        extractor = PDFExtractor(use_llm_for_items=True)
+        text = "Amazon Order\nBaking Sheet Set $25.00\nKitchen Towels $10.00"
+        
+        # Mock the LLM client
+        with patch.object(extractor, 'llm_client', None):
+            with patch('src.services.pdf_extractor.ReceiptLLMClient') as mock_llm_class:
+                mock_llm = Mock()
+                mock_llm.extract_items.return_value = {
+                    "items": [
+                        {"name": "Baking Sheet Set", "price": 25.00, "category": "Kitchen"},
+                        {"name": "Kitchen Towels", "price": 10.00, "category": "Kitchen"}
+                    ]
+                }
+                mock_llm_class.return_value = mock_llm
+                
+                items = extractor.extract_items(text)
+                
+                assert isinstance(items, list)
+                assert len(items) == 2
     
-    def test_extract_items_description_no_match(self, extractor):
-        """Test item description when no items are found"""
-        text = "Random text with no items"
-        description = extractor.extract_items_description(text, 'walmart')
+    def test_extract_items_llm_failure(self):
+        """Test extracting items when LLM fails"""
         
-        assert description == ''
+        extractor = PDFExtractor(use_llm_for_items=True)
+        text = "Some text"
+        
+        with patch.object(extractor, 'llm_client', None):
+            with patch('src.services.pdf_extractor.ReceiptLLMClient') as mock_llm_class:
+                mock_llm = Mock()
+                mock_llm.extract_items.side_effect = Exception("LLM error")
+                mock_llm_class.return_value = mock_llm
+                
+                items = extractor.extract_items(text)
+                
+                # Should return empty list on error
+                assert isinstance(items, list)
+                assert len(items) == 0
     
     def test_parse_receipt_walmart_pdf(self, extractor, fixtures_dir):
         """Test parsing complete Walmart receipt PDF"""
         pdf_path = fixtures_dir / "pdfs" / "2026-03-04_Walmart_Order_Meatballs_$80.59.pdf"
         result = extractor.parse_receipt(pdf_path)
         
-        assert result['merchant_type'] == 'walmart'
-        assert result['merchant_name'] == 'Walmart Order'
+        assert result['merchant_name'] == 'Walmart'
+        assert result['transaction_type'] == 'Order'
         assert result['amount'] == 80.59
         assert result['date'] is not None
         assert result['date'].year == 2026
         assert result['date'].month == 3
         assert result['date'].day == 4
         assert result['pdf_filename'] == "2026-03-04_Walmart_Order_Meatballs_$80.59.pdf"
+        assert 'summary' in result
+        assert 'items' in result
     
     def test_parse_receipt_amazon_pdf(self, extractor, fixtures_dir):
         """Test parsing complete Amazon receipt PDF"""
         pdf_path = fixtures_dir / "pdfs" / "2026-03-07_Amazon_Order_Baking_Sheets_$49.60.pdf"
         result = extractor.parse_receipt(pdf_path)
         
-        assert result['merchant_type'] == 'amazon'
-        assert result['merchant_name'] == 'Amazon Order'
+        assert result['merchant_name'] == 'Amazon'
+        assert result['transaction_type'] == 'Order'
         assert result['amount'] == 49.60
         assert result['date'] is not None
         assert result['date'].year == 2026
         assert result['date'].month == 3
         assert result['date'].day == 7
         assert result['pdf_filename'] == "2026-03-07_Amazon_Order_Baking_Sheets_$49.60.pdf"
+        assert 'summary' in result
+        assert 'items' in result
     
     def test_date_extraction_bug_fix(self, extractor):
         """Test that the date extraction bug is fixed (issue #1)"""

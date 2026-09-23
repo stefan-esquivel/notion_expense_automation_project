@@ -1,163 +1,62 @@
 """Main application entry point."""
-import sys
-import logging
 from pathlib import Path
-from datetime import datetime
-from typing import Optional
-
-import notion_client
 
 from config import Config
-from pdf_extractor import PDFExtractor
-from file_organizer import FileOrganizer
-from notion_api import NotionExpenseClient
-from ui import ExpenseUI
-
-
-# Set up logging
-def setup_logging():
-    """Configure logging to file and console."""
-    log_file = Config.LOG_FOLDER / f"expense_automation_{datetime.now().strftime('%Y%m%d')}.log"
-    
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler()
-        ]
-    )
-    return logging.getLogger(__name__)
+from services.notion_api import NotionExpenseClient
+from services.ui import ExpenseUI
+from logger import get_logger
+from workflows.langgraph.graph import build_graph, create_initial_state
+from domain.enums import WorkflowStatus
 
 
 class ExpenseAutomation:
     """Main application class orchestrating the expense automation workflow."""
     
     def __init__(self):
-        self.logger = setup_logging()
+        self.logger = get_logger(__name__)
         self.config = Config
-        self.pdf_extractor = PDFExtractor()
-        self.file_organizer = FileOrganizer(Config.PROCESSED_FOLDER)
-        self.notion_client = NotionExpenseClient(
-            Config.NOTION_API_TOKEN,
-            Config.EXPENSE_TABLE_DATABASE_ID,
-            split_db_id=Config.SPLIT_DETAILS_DATABASE_ID,
-            balance_page_id=Config.BALANCES_PAGE_ID
-        )
+        self.workflow = build_graph()
         self.ui = ExpenseUI(
             Config.YOUR_NAME,
             Config.PARTNER_NAME,
-            notion_client=self.notion_client
+            notion_client=None  # Will be initialized in workflow nodes
         )
     
-    def process_receipt(self, pdf_path: Path) -> bool:
+    def process_receipt(self, pdf_path: Path) -> bool | None:
         """
-        Process a single receipt through the entire workflow.
-        Returns True if successful, False otherwise.
+        Process a single receipt through the LangGraph workflow.
+        Returns True on success, None for an existing duplicate, False on failure.
         """
         try:
             self.ui.display_processing(pdf_path.name)
             
-            # Step 1: Extract information from PDF
-            self.logger.info(f"Extracting information from {pdf_path.name}")
-            receipt_info = self.pdf_extractor.parse_receipt(pdf_path)
+            # Create initial workflow state
+            self.logger.info(f"Starting workflow for {pdf_path.name}")
+            initial_state = create_initial_state(str(pdf_path))
             
-            # Validate required fields
-            if not receipt_info.get('amount') or not receipt_info.get('date'):
-                self.ui.display_error("Could not extract amount or date from receipt")
-                self.logger.error(f"Missing required fields in {pdf_path.name}")
+            # Run the workflow
+            result = self.workflow.invoke(initial_state)
+            
+            # Check workflow status
+            if result['status'] == WorkflowStatus.DUPLICATE:
+                self.ui.display_duplicate()
+                self.logger.info(f"Skipped already-submitted receipt: {pdf_path.name}")
+                return None
+            if result['status'] == WorkflowStatus.COMPLETED:
+                if result.get('results'):
+                    results = result['results']
+                    self.ui.display_success(str(results.archive_path))
+                    self.logger.info(f"Successfully processed {pdf_path.name}")
+                    self.logger.info(f"Notion expense ID: {results.notion_expense_id}")
+                    return True
+                else:
+                    self.ui.display_error("Workflow completed but no results found")
+                    return False
+            else:
+                error_msg = result.get('failure_reason', 'Unknown error')
+                self.ui.display_error(f"Workflow failed: {error_msg}")
+                self.logger.error(f"Workflow failed for {pdf_path.name}: {error_msg}")
                 return False
-            
-            # Step 2: Review and edit information
-            receipt_info = self.ui.review_and_edit(receipt_info)
-            
-            # Step 3: Select who paid
-            paid_by = self.ui.select_payer()
-
-            paid_by_user_id = self.notion_client.user_id_map[paid_by]
-            
-            # Determine who didn't pay (for split entry)
-            other_person = (
-                self.config.PARTNER_NAME if paid_by == self.config.YOUR_NAME
-                else self.config.YOUR_NAME
-            )
-
-            other_person_user_id = self.notion_client.user_id_map[other_person]
-            
-            # Step 4: Confirm split details
-            use_split, split_percentage = self.ui.confirm_split(
-                receipt_info['amount'],
-                split_percentage=self.config.DEFAULT_SPLIT_PERCENTAGE
-            )
-            
-            # Step 5: Prepare data for Notion
-            expense_data = {
-                'description': receipt_info['description'],
-                'date': receipt_info['date'],
-                'amount': receipt_info['amount'],
-                'paid_by': paid_by,
-                'paid_by_user_id': paid_by_user_id,
-                'receipt_filename': pdf_path.name
-            }
-            
-            split_data = None
-            if use_split:
-                split_title = self.notion_client.generate_split_title(
-                    other_person,
-                    receipt_info['merchant_name'],
-                    receipt_info['description'],
-                    receipt_info['date']
-                )
-                
-                split_data = {
-                    'title': split_title,
-                    'person': other_person,
-                    "person_user_id": other_person_user_id,
-                    'date': receipt_info['date'],
-                    'share_percentage': split_percentage
-                }
-            
-            # Step 6: Display final preview
-            self.ui.display_final_preview(expense_data, split_data)
-            
-            # Step 7: Confirm before sending to Notion
-            if not self.ui.confirm_send_to_notion():
-                self.logger.info("User cancelled sending to Notion")
-                return False
-            
-            # Step 8: Create Notion entries
-            self.logger.info("Creating Notion entries")
-            expense_page_id = self.notion_client.create_expense_entry(
-                merchant_description=expense_data['description'],
-                date=expense_data['date'],
-                amount=expense_data['amount'],
-                paid_by=expense_data['paid_by'],
-                receipt_file_path=pdf_path,  # Pass the file path for upload
-                receipt_filename=expense_data['receipt_filename']
-            )
-            
-            if split_data:
-                self.notion_client.create_split_entry(
-                    split_data['title'],
-                    split_data['person'],
-                    split_data['share_percentage'],
-                    expense_page_id
-                )
-            
-            # Step 9: Organize file
-            self.logger.info("Organizing receipt file")
-            organized_path = self.file_organizer.organize_file(
-                pdf_path,
-                receipt_info['date'],
-                receipt_info['merchant_name'],
-                receipt_info['description'],
-                receipt_info['amount']
-            )
-            
-            # Step 10: Success!
-            self.ui.display_success(str(organized_path))
-            self.logger.info(f"Successfully processed {pdf_path.name}")
-            return True
             
         except Exception as e:
             self.ui.display_error(str(e))
@@ -169,50 +68,59 @@ class ExpenseAutomation:
         pdf_files = list(Config.INPUT_FOLDER.glob("*.pdf"))
         return sorted(pdf_files)
     
+    def _validate_config(self) -> None:
+        """Validate configuration, raising ValueError on failure."""
+        self.logger.info("Validating configuration")
+        Config.validate()
+
+    def _test_notion(self) -> bool:
+        """Test Notion API connectivity. Returns True if all resources are reachable."""
+        self.logger.info("Testing Notion API connection")
+        client = NotionExpenseClient(
+            Config.NOTION_API_TOKEN,
+            Config.EXPENSE_TABLE_DATABASE_ID,
+            split_db_id=Config.SPLIT_DETAILS_DATABASE_ID,
+            balance_page_id=Config.BALANCES_PAGE_ID,
+        )
+        return client.test_connection()
+
     def run(self):
         """Main application loop."""
         try:
-            # Validate configuration
-            self.logger.info("Validating configuration")
-            Config.validate()
-            
-            # Test Notion connection
-            self.logger.info("Testing Notion API connection")
-            if not self.notion_client.test_connection():
+            self._validate_config()
+
+            if not self._test_notion():
                 self.ui.display_error("Failed to connect to Notion API. Check your credentials.")
                 return
-            
+
             # Display welcome
             self.ui.display_welcome()
-            
+
             # Scan for receipts
             pdf_files = self.scan_input_folder()
-            
+
             if not pdf_files:
                 self.ui.display_error(f"No PDF files found in {Config.INPUT_FOLDER}")
                 self.logger.info("No receipts to process")
                 return
-            
+
             self.logger.info(f"Found {len(pdf_files)} receipt(s) to process")
-            
+
             # Process each receipt
-            success_count = 0
-            for pdf_file in pdf_files:
-                if self.process_receipt(pdf_file):
-                    success_count += 1
-            
+            outcomes = [self.process_receipt(pdf_path=f) for f in pdf_files]
+            success_count = sum(outcome is True for outcome in outcomes)
+            duplicate_count = sum(outcome is None for outcome in outcomes)
+
             # Summary
-            self.logger.info(f"Processed {success_count}/{len(pdf_files)} receipts successfully")
-            
+            self.logger.info(f"Processed {success_count}/{len(pdf_files)} receipts successfully; "
+                             f"skipped {duplicate_count} already-submitted receipts")
+
         except ValueError as e:
             self.ui.display_error(f"Configuration error: {e}")
             self.logger.error(f"Configuration error: {e}")
         except KeyboardInterrupt:
             self.logger.info("Application interrupted by user")
             self.ui.display_error("Application interrupted")
-        except Exception as e:
-            self.ui.display_error(f"Unexpected error: {e}")
-            self.logger.error(f"Unexpected error: {e}", exc_info=True)
 
 
 def main():

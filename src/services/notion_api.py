@@ -1,16 +1,26 @@
 """Notion API integration module."""
-from httpx._models import Response
+from httpx import Response
 
 
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Optional
 from pathlib import Path
+import time
 import httpx
 from notion_client import Client
 from notion_client.errors import APIResponseError
+from services.split_titles import generate_split_title
+from services.notion_retry import notion_request
 from config import Config
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 NOTION_VERSION = "2025-09-03"
+
+# File upload polling configuration
+FILE_UPLOAD_POLL_MAX_ATTEMPTS = 10
+FILE_UPLOAD_POLL_INTERVAL = 0.5
 
 class NotionExpenseClient:
     """Handle all Notion API operations for expense tracking."""
@@ -45,7 +55,7 @@ class NotionExpenseClient:
             user = self.client.users.retrieve(user_id=user_id)
             return user.get("name", user_id)
         except Exception as e:
-            print(f"Warning: Failed to fetch username for user ID {user_id}: {e}")
+            logger.warning(f"Failed to fetch username for user ID {user_id}: {e}")
             # Fallback to checking local map
             for name, uid in self.user_id_map.items():
                 if uid == user_id:
@@ -104,8 +114,8 @@ class NotionExpenseClient:
                 # Optional: verify status is uploaded (it should be for single_part)
                 if send_obj.get("status") != "uploaded":
                     # Defensive polling (usually unnecessary for single_part)
-                    for _ in range(10):
-                        time.sleep(0.5)
+                    for _ in range(FILE_UPLOAD_POLL_MAX_ATTEMPTS):
+                        time.sleep(FILE_UPLOAD_POLL_INTERVAL)
                         r: Response = client.get(
                             f"https://api.notion.com/v1/file_uploads/{file_upload_id}",
                             headers=headers,
@@ -119,7 +129,7 @@ class NotionExpenseClient:
                 return file_upload_id
 
         except Exception as e:
-            print(f"Warning: Failed to upload file to Notion: {e}")
+            logger.warning(f"Failed to upload file to Notion: {e}")
             return None
     
     def create_expense_entry(
@@ -165,11 +175,11 @@ class NotionExpenseClient:
                 "number": 0.0
             }
         }
-        
+
         # Upload file to Notion if provided
         if receipt_file_path and receipt_filename:
             file_id = self._upload_file_to_notion(receipt_file_path, receipt_filename)
-            
+
             if file_id:
                 properties["Receipt (optional)"] = {
                     "files": [
@@ -181,29 +191,29 @@ class NotionExpenseClient:
                         }
                     ]
                 }
-        
+
         # Get emoji for the merchant
         emoji = Config.get_merchant_emoji(merchant_description)
-        
-        try:
-            response = self.client.pages.create(
-                parent={"database_id": self.expense_db_id},
-                properties=properties,
-                icon={
-                    "type": "emoji",
-                    "emoji": emoji
-                }
-            )
-            return response["id"]
-        except APIResponseError as e:
-            raise Exception(f"Failed to create expense entry: {e}")
-    
+
+        response = notion_request(lambda: self.client.pages.create(
+            parent={"database_id": self.expense_db_id},
+            properties=properties,
+            icon={
+                "type": "emoji",
+                "emoji": emoji
+            }
+        ))
+        return response["id"]
+
+
     def create_split_entry(
         self,
         title: str,
         person: str,
         share_percent: float,
-        expense_page_id: str
+        expense_page_id: str,
+        *,
+        link: bool = True,
     ) -> str:
         """
         Create an entry in the Split Details Table.
@@ -236,28 +246,33 @@ class NotionExpenseClient:
                 ]
             }
         }
-        
+
         # Get emoji for the person
         emoji = Config.get_person_emoji(person_name=person)
-        
-        try:
-            response = self.client.pages.create(
-                parent={"database_id": self.split_db_id},
-                properties=properties,
-                icon={
-                    "type": "emoji",
-                    "emoji": emoji
-                }
-            )
-            split_page_id = response["id"]
-            
-            # Link the split entry to the expense entry (critical: orphaned split is a data integrity issue)
-            self._link_pages(source_page_id=expense_page_id, target_page_id=split_page_id, table_name=Config.EXPENSE_RELATION_PROPERTY, critical=True)
-            
-            return split_page_id
-        except APIResponseError as e:
-            raise Exception(f"Failed to create split entry: {e}")
-    
+
+        response = notion_request(lambda: self.client.pages.create(
+            parent={"database_id": self.split_db_id},
+            properties=properties,
+            icon={
+                "type": "emoji",
+                "emoji": emoji
+            }
+        ))
+        split_page_id = response["id"]
+
+        # Link the split entry to the expense entry (critical: orphaned split is a data integrity issue)
+        if link:
+            self.link_split(expense_page_id, split_page_id)
+
+        return split_page_id
+
+
+    def link_split(self, expense_page_id: str, split_page_id: str):
+        # Retry the whole read/merge/update operation, not a stale relation payload.
+        return notion_request(lambda: self._link_pages(
+            source_page_id=expense_page_id, target_page_id=split_page_id,
+            table_name=Config.EXPENSE_RELATION_PROPERTY, critical=True), safe_to_repeat=True)
+
     def _link_pages(self, source_page_id: str, target_page_id: str, table_name: str, critical: bool = False):
         """Append target_page_id to the relation property `table_name` on source_page_id, deduplicating existing entries.
 
@@ -285,8 +300,8 @@ class NotionExpenseClient:
             )
         except (APIResponseError, KeyError) as e:
             if critical:
-                raise Exception(f"Failed to link source page {source_page_id} to target page {target_page_id}: {e}")
-            print(f"Warning: Failed to link source page {source_page_id} to target page {target_page_id}: {e}")
+                raise
+            logger.warning(f"Failed to link source page {source_page_id} to target page {target_page_id}: {e}")
     
     def generate_split_title(
         self,
@@ -299,48 +314,8 @@ class NotionExpenseClient:
         Generate a split title following the pattern from CSV examples.
         Pattern: "[Person]'s [Merchant] [Type] Split ([Details])"
         """
-        # Extract category/type from merchant name
-        merchant_lower = merchant_name.lower()
-        
-        if 'walmart' in merchant_lower:
-            category = 'Walmart Food Split'
-        elif 'amazon' in merchant_lower:
-            category = 'Amazon Order Split' if 'order' in merchant_lower else 'Amazon Split'
-        elif 'electrical' in merchant_lower or 'electric' in merchant_lower:
-            month = date.strftime('%b')
-            return f"{person_name}'s Electrical Bill Split ({month})"
-        elif 'rent' in merchant_lower:
-            month = date.strftime('%b')
-            return f"{person_name}'s Rent Split ({month})"
-        elif 'netflix' in merchant_lower:
-            month = date.strftime('%b')
-            return f"{person_name}'s Netflix Payment ({month})"
-        elif 'youtube' in merchant_lower or 'yt' in merchant_lower:
-            month = date.strftime('%b')
-            return f"{person_name}'s YT Premium Split ({month})"
-        elif 'parking' in merchant_lower:
-            month = date.strftime('%b')
-            return f"{person_name}'s Parking Share ({month})"
-        elif 'longo' in merchant_lower:
-            return f"{person_name}'s Longo's Groceries Share"
-        elif 'tv' in merchant_lower:
-            month = date.strftime('%b')
-            return f"{person_name}'s TV Payment ({month})"
-        else:
-            category = f"{merchant_name} Split"
-        
-        # Extract details from description (text in parentheses)
-        details = ''
-        if '(' in description and ')' in description:
-            start = description.index('(') + 1
-            end = description.index(')')
-            details = description[start:end]
-        
-        if details:
-            return f"{person_name}'s {category} ({details})"
-        else:
-            return f"{person_name}'s {category}"
-    
+        return generate_split_title(person_name, merchant_name, description, date)
+
     def test_connection(self) -> bool:
         """Test the Notion API connection and database access."""
         try:
@@ -350,6 +325,6 @@ class NotionExpenseClient:
             self.client.pages.retrieve(page_id=self.balance_page_id)
             return True
         except APIResponseError as e:
-            print(f"Notion API connection test failed: {e}")
+            logger.error(f"Notion API connection test failed: {e}")
             return False
 

@@ -8,6 +8,7 @@ __pycache__/
 *.so
 .Python
 venv/
+.venv/
 env/
 ENV/
 build/
@@ -39,6 +40,10 @@ logs/*.log
 # Receipts (keep structure but not actual files)
 receipts/input/*.pdf
 receipts/processed/**/*.pdf
+receipts/test_input/*
+receipts/test_processed/*
+!receipts/test_input/.gitkeep
+!receipts/test_processed/.gitkeep
 
 # OS
 .DS_Store
@@ -55,3 +60,14 @@ htmlcov/
 /bugs
 .env.prod
 .env.qa
+
+# QA Environment state
+scripts/.qa_environment_state.json
+receipts/qa_processed/
+AGENTS.md
+CLAUDE.md
+.bob/skills/git-commit/SKILL.md
+.bob/skills/karpathy-guidelines/SKILL.md
+
+# Durable local submission recovery data
+.submission-state/

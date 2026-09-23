@@ -160,36 +160,6 @@ class PDFExtractor:
         
         return None
     
-    # def extract_items_description(self, text: str, merchant_type: str) -> list:
-    #     """Extract a description of items purchased based on merchant type."""
-    #     text_lower = text.lower()
-        
-    #     # Common food items
-    #     food_keywords = [
-    #         'chicken', 'shrimp', 'salmon', 'beef', 'pork',
-    #         'teriyaki', 'mediterranean', 'chipotle', 'greek',
-    #         'soup', 'stir fry', 'krupnik', 'basics',
-    #         'eggs', 'onion', 'fiber', 'hummus', 'tomato'
-    #     ]
-        
-    #     # Amazon items
-    #     amazon_keywords = [
-    #         'scale', 'tray', 'bulbs', 'soda', 'club soda', 'baking sheet'
-    #     ]
-        
-    #     found_items = []
-        
-    #     if merchant_type == 'walmart':
-    #         for keyword in food_keywords:
-    #             if keyword in text_lower:
-    #                 found_items.append(keyword.title())
-    #     elif merchant_type == 'amazon':
-    #         for keyword in amazon_keywords:
-    #             if keyword in text_lower:
-    #                 found_items.append(keyword.title())
-        
-    #     return found_items
-    
     @staticmethod
     def _build_summary(items: List[ReceiptItem]) -> str:
         """Return a comma-joined summary of the first three item names, or empty string."""
@@ -262,12 +232,7 @@ class PDFExtractor:
         items = self.extract_items(text)
 
         summary = self._build_summary(items)
-        logger.debug(f"Full description: {merchant_name} {transaction_type} ({summary})" if summary else f"Full description: {merchant_name}")
 
-        # TODO: Add support for order_id extraction
-        # walmart example: 600000081236542
-        # amazon example: 701-3765924-2833010
-        # we should not imply merchant_type
         return {
             'order_id': None,
             'merchant_name': merchant_name,

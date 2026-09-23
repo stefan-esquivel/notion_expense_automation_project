@@ -7,11 +7,12 @@ archived locally; a durable journal supports retries and duplicate detection.
 ## Installation
 
 Use Python 3.11+ on macOS/Linux (the submission journal uses `fcntl` for locking).
-Verification for issue 26 used Python 3.13.2. Run commands from the repository root.
+Release preparation is verified on Python 3.13.2. Run commands from the repository root.
 
 ```sh
 python3 -m venv .venv
 source .venv/bin/activate
+python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 cp .env.example .env
 ```
@@ -107,7 +108,9 @@ python -m pytest test/unit/ test/integration/ --cov=src --cov-report=term-missin
 ```
 
 See [issue 26 verification](docs/WORKFLOW_VERIFICATION.md) for the tested baseline,
-coverage, behavior map and remaining limitations. Live Notion verification is
+coverage, behavior map and remaining limitations. See [release verification](docs/RELEASE_VERIFICATION.md)
+for clean-install checks and dependency compatibility, and [changelog](CHANGELOG.md)
+for the pending 2.0.0 release. Live Notion verification is
 separate (issue 57); never run e2e against production.
 
 ## Troubleshooting

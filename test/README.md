@@ -18,9 +18,9 @@ test/
 │   ├── conftest.py                # Test database lifecycle fixtures
 │   └── test_expense_submission.py # Full expense submission flow
 └── fixtures/                      # Shared test data
-    ├── sample_receipt.txt         # Sample receipt text
-    ├── sample_receipt_data.json   # Structured receipt data
-    └── mock_notion_response.json  # Mock Notion API responses
+    ├── text/sample_receipt.txt         # Sample receipt text
+    ├── json/sample_receipt_data.json   # Structured receipt data
+    └── json/mock_notion_response.json  # Mock Notion API responses
 ```
 
 ## Test Layers
@@ -60,7 +60,7 @@ pytest test/e2e/ -v -m e2e
 ### 1. Install Development Dependencies
 
 ```bash
-pip install -r requirements-dev.txt
+pip install -r requirements.txt -r requirements-dev.txt
 ```
 
 ### 2. Configure E2E Test Environment
@@ -201,7 +201,7 @@ def test_my_e2e_flow(
     assert response["object"] == "page"
 ```
 
-## Continuous Integration
+## Continuous Integration (example; not installed)
 
 The test suite is designed to run in CI/CD pipelines:
 
@@ -240,7 +240,7 @@ The test suite is designed to run in CI/CD pipelines:
 - Verify test token has access to test databases
 
 ### Import Errors
-- Install dev dependencies: `pip install -r requirements-dev.txt`
+- Install dev dependencies: `pip install -r requirements.txt -r requirements-dev.txt`
 - Ensure you're in the project root directory
 
 ### Cleanup Failures

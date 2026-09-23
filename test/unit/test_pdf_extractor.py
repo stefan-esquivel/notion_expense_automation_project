@@ -3,8 +3,7 @@ Unit tests for pdf_extractor.py
 Tests PDF parsing logic with mocked file operations.
 """
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from datetime import datetime
+from unittest.mock import Mock, patch
 from pathlib import Path
 from src.services.pdf_extractor import PDFExtractor
 
@@ -207,7 +206,6 @@ class TestPDFExtractor:
     
     def test_extract_items_with_llm_enabled(self):
         """Test extracting items when LLM is enabled"""
-        from unittest.mock import Mock, patch
         
         extractor = PDFExtractor(use_llm_for_items=True)
         text = "Amazon Order\nBaking Sheet Set $25.00\nKitchen Towels $10.00"
@@ -231,7 +229,6 @@ class TestPDFExtractor:
     
     def test_extract_items_llm_failure(self):
         """Test extracting items when LLM fails"""
-        from unittest.mock import Mock, patch
         
         extractor = PDFExtractor(use_llm_for_items=True)
         text = "Some text"

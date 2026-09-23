@@ -1,8 +1,7 @@
 """Unit tests for enrich_node.py"""
 
 import pytest
-from unittest.mock import Mock, patch
-from datetime import datetime
+from unittest.mock import patch
 import sys
 import os
 

@@ -1,7 +1,7 @@
 """Unit tests for validate_node.py"""
 
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 from datetime import datetime
 import sys
 import os

@@ -6,7 +6,7 @@ from typing import Optional
 
 from workflows.langgraph.state import ReceiptWorkflowState
 from domain.enums import WorkflowStatus, ValidationSeverity
-from domain.models.workflow import ReviewData, ValidationIssue
+from domain.models.workflow import ReviewData
 from domain.models.expense import ExpenseSummary, SplitDetail
 from config import Config
 from services.ui import ExpenseUI, OVERRIDE_SENTINEL, SKIP_SENTINEL
@@ -349,9 +349,7 @@ def review_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
         return state
 
     except Exception as e:
-        import traceback
         state["status"] = WorkflowStatus.FAILED
         state["failure_reason"] = f"Review failed: {str(e)}"
-        logger.error(f"\n✗ Review error: {e}")
-        logger.debug(f"\nFull error details:\n{traceback.format_exc()}")
+        logger.error(f"\n✗ Review error: {e}", exc_info=True)
         return state

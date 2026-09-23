@@ -1,8 +1,7 @@
 """Unit tests for extract_node.py"""
 
 import pytest
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from datetime import datetime
 import sys
 import os
@@ -14,7 +13,7 @@ from workflows.langgraph.nodes.extract_node import extract_node
 from workflows.langgraph.state import ReceiptWorkflowState
 from domain.enums import WorkflowStatus, Sources
 from domain.models.workflow import WorkflowInput
-from domain.models.recipts import Receipt, ReceiptItem
+from domain.models.recipts import ReceiptItem
 
 
 class TestExtractNode:
@@ -285,7 +284,6 @@ class TestExtractNode:
             
             # Verify logging calls
             assert mock_logger.info.call_count >= 2
-            assert mock_logger.debug.call_count >= 1
             
             # Check for specific log messages
             log_calls = [str(call) for call in mock_logger.info.call_args_list]

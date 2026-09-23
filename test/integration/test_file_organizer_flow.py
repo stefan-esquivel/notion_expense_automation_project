@@ -3,9 +3,6 @@ Integration tests for file organizer flow.
 Tests how file_organizer interacts with other modules.
 """
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from pathlib import Path
-from datetime import datetime
 
 
 @pytest.mark.integration

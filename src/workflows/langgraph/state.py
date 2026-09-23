@@ -1,5 +1,4 @@
 from typing import TypedDict, Optional, Set, NotRequired
-from datetime import datetime
 
 from domain.enums import WorkflowStatus
 from domain.models.recipts import Receipt

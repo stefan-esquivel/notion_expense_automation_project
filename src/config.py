@@ -4,7 +4,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Load environment variables
-from pathlib import Path
 
 env = os.getenv('APP_ENV', '').lower()
 if env == 'qa':
@@ -27,7 +26,7 @@ else:
     load_dotenv()
     print("✓ Loaded LOCAL environment")
 
-# After the if/elif/else block
+# Journal scope uses local for the default development environment.
 CURRENT_ENV = env if env in ['qa', 'prod'] else 'local'
 
 class Config:

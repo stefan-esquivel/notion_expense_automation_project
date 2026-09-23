@@ -27,7 +27,11 @@ local archiving failed, recover the local file separately; re-running the full
 workflow will report it as already submitted.
 
 Submissions with incomplete Notion writes continue through the workflow so
-recovery is still possible. Run them again with the same approved data and configuration. Completed
+recovery is still possible. If the initial expense request was explicitly rejected
+and no later operations exist, review and retry with corrected data; the journal
+updates the saved payload automatically. This also applies before any request
+and after an operator confirms that an uncertain expense was not created.
+Otherwise, run again with the same approved data and configuration. Completed
 writes are reused. An explicit rejected request can be attempted again. A failed
 split link reuses the split's ID. The commit node also supports archive-only recovery without creating Notion
 pages again when invoked directly with the original approved summary. The full
@@ -87,7 +91,7 @@ An empty search result immediately after a timeout is not sufficient evidence.
 If the outcome remains uncertain, leave it blocked. Do not delete the journal,
 change the receipt bytes, or change database IDs to bypass this check.
 
-When approved data has changed, restore the originally approved values to finish
+When approved data has changed after a successful or uncertain write, restore the originally approved values to finish
 the existing submission, then correct the existing Notion entry deliberately.
 Automatic amendments and rollback of previously created pages are outside #24.
 

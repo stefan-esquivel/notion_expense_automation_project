@@ -104,9 +104,21 @@ class SubmissionJournal:
     def prepare(self, scope: str, receipt_hash: str, payload: dict, source=None) -> str:
         submission_id = hashlib.sha256(f'{scope}\n{receipt_hash}'.encode()).hexdigest()
         encoded = json.dumps(payload, sort_keys=True, separators=(',', ':'))
-        row = self.db.execute('SELECT payload FROM submissions WHERE id=?', (submission_id,)).fetchone()
+        row = self.db.execute('SELECT payload,archive_path FROM submissions WHERE id=?', (submission_id,)).fetchone()
         if row and row['payload'] != encoded:
-            raise RuntimeError(f'Submission {submission_id}: approved data changed; reconcile before resubmitting')
+            operations = self.db.execute(
+                'SELECT name,status FROM operations WHERE submission_id=?', (submission_id,)).fetchall()
+            # No create was attempted, or the initial expense was definitively
+            # rejected (including an operator-confirmed non-creation). Once any
+            # later operation exists, preserve the original approved payload.
+            can_revise = not row['archive_path'] and all(
+                operation['name'] == 'expense' and operation['status'] == 'pending'
+                for operation in operations)
+            if not can_revise:
+                raise RuntimeError(f'Submission {submission_id}: approved data changed; reconcile before resubmitting')
+            with self.db:
+                self.db.execute('UPDATE submissions SET payload=?,source=? WHERE id=?',
+                                (encoded, str(source.resolve()) if source else None, submission_id))
         with self.db:
             self.db.execute('INSERT OR IGNORE INTO submissions(id,scope,receipt_hash,payload,source) VALUES(?,?,?,?,?)',
                             (submission_id, scope, receipt_hash, encoded,

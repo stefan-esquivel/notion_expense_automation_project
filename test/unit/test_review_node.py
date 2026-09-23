@@ -346,8 +346,8 @@ class TestReviewNode:
         
         result = review_node(valid_state)
         
-        # Filename should be: 2026-05-08_Walmart_Order_(Groceries)_$11.99.pdf
-        assert result["expense_summary"].receipt_filename == "2026-05-08_Walmart_Order_(Groceries)_$11.99.pdf"
+        # Filename should be: 2026-05-08_Walmart_Order_Groceries_$11.99.pdf
+        assert result["expense_summary"].receipt_filename == "2026-05-08_Walmart_Order_Groceries_$11.99.pdf"
     
     def test_review_node_displays_final_preview(self, valid_state, mock_config, mock_ui):
         """Test that final preview is displayed to user."""
@@ -521,3 +521,17 @@ class TestReviewNode:
         assert kwargs["originally_missing"] == []
         assert kwargs["filled_fields"] == {}
         assert kwargs["still_missing"] == []
+
+
+@pytest.mark.unit
+def test_generated_description_uses_plain_words():
+    from types import SimpleNamespace
+    from workflows.langgraph.nodes.review_node import _receipt_description
+    receipt = SimpleNamespace(
+        vendor="Electrical Bill", transaction_type="Charge",
+        summary="Electricity Charge, Bulk Bill HST, Electricity Charges (Delivery Charge)",
+    )
+    assert _receipt_description(receipt) == (
+        "Electrical Bill Charge Electricity Charge Bulk Bill HST "
+        "Electricity Charges Delivery Charge"
+    )

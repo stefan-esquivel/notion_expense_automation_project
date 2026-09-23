@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
 from typing import Optional, List
 from pathlib import Path
@@ -41,8 +41,18 @@ class ExpenseSummary(BaseModel):
     
     receipt_filename: Optional[str] = Field(
         default=None,
+        max_length=100,
         description="Organized filename for the receipt (e.g., '2026-03-15_Walmart_Order_$92.01.pdf')"
     )
+
+    @field_validator('receipt_filename', mode='before')
+    @classmethod
+    def shorten_receipt_filename(cls, value):
+        """Fit Notion's attachment-name limit while preserving the extension."""
+        if isinstance(value, str) and len(value) > 100:
+            suffix = Path(value).suffix[:20]
+            return value[:100 - len(suffix)] + suffix
+        return value
     
     splits: Optional[List['SplitDetail']] = Field(
         default=None,

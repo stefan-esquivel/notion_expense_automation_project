@@ -21,8 +21,8 @@ class ReceiptItem(BaseModel):
     )
     
     price: float = Field(
-        description="Price of this individual item in dollars",
-        gt=0,
+        description="Line item amount in dollars; discounts and credits are negative",
+        allow_inf_nan=False,
         examples=[5.99, 12.50, 3.29]
     )
     

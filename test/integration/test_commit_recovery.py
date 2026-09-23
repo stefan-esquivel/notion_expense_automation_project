@@ -208,3 +208,45 @@ def test_balance_change_does_not_bypass_existing_identity(submission, monkeypatc
     monkeypatch.setattr(Config, 'BALANCES_PAGE_ID', 'c' * 32)
     assert 'changed' in run(summary)['failure_reason']
     assert api.pages.create.call_count == 2
+
+
+def test_corrected_payload_retries_after_expense_rejection(submission):
+    summary, api = submission
+    api.pages.create.side_effect = [api_error(400), {'id': '1' * 32}, {'id': '2' * 32}]
+    first = run(summary)
+    assert first['status'] == WorkflowStatus.FAILED
+    from services.submission_journal import SubmissionJournal
+    journal = SubmissionJournal(Config.SUBMISSION_JOURNAL_PATH)
+    with journal:
+        before = journal.inspect(first['submission_id'])
+    assert before['operations'] == [{'name': 'expense', 'status': 'pending', 'result': 'null'}]
+    assert journal.find_completed(before['scope'], before['receipt_hash']) is None
+
+    summary.merchant_description = 'Shop Tools'
+    summary.amount = 12
+    result = run(summary)
+    assert result['status'] == WorkflowStatus.COMPLETED
+    assert result['submission_id'] == first['submission_id']
+    assert api.pages.create.call_count == 3  # rejection, expense, split
+    sent = api.pages.create.call_args_list[1].kwargs['properties']
+    assert sent['Merchant / Description']['title'][0]['text']['content'] == 'Shop Tools'
+    assert sent['Amount']['number'] == 12
+    with journal:
+        after = journal.inspect(first['submission_id'])
+    assert after['payload']['merchant_description'] == 'Shop Tools'
+    assert after['payload']['amount'] == 12
+    assert journal.find_completed(before['scope'], before['receipt_hash']) == '1' * 32
+    assert run(summary)['status'] == WorkflowStatus.COMPLETED
+    assert api.pages.create.call_count == 3
+
+
+@pytest.mark.parametrize('failure', [RequestTimeoutError(), api_error(503)])
+def test_corrected_payload_still_blocked_after_uncertain_create(submission, failure):
+    summary, api = submission
+    api.pages.create.side_effect = failure
+    assert run(summary)['status'] == WorkflowStatus.FAILED
+    summary.merchant_description = 'Shop Tools'
+    result = run(summary)
+    assert result['status'] == WorkflowStatus.FAILED
+    assert 'approved data changed' in result['failure_reason']
+    assert api.pages.create.call_count == 1

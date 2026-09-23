@@ -758,3 +758,17 @@ class TestNotionExpenseClient:
         assert any("Notion API connection test failed" in record.message for record in caplog.records)
 
 
+
+@pytest.mark.unit
+@pytest.mark.parametrize('length', [99, 100, 120])
+def test_attachment_display_name_respects_notion_limit(notion_client, length):
+    filename = 'x' * (length - 4) + '.pdf'
+    with patch.object(notion_client, '_upload_file_to_notion', return_value='upload-id') as upload:
+        notion_client.create_expense_entry(
+            'Electricity Bill', datetime(2026, 9, 23), 50.0, 'Alice',
+            Path('/test/receipt.pdf'), filename,
+        )
+    properties = notion_client.client.pages.create.call_args.kwargs['properties']
+    name = properties['Receipt (optional)']['files'][0]['name']
+    assert name == 'x' * (min(length, 100) - 4) + '.pdf'
+    assert upload.call_args.args[1] == name

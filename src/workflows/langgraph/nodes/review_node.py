@@ -18,6 +18,15 @@ logger = get_logger(__name__)
 _MERCHANT_NAME_SUFFIXES = ("Order", "Bill", "Payment", "Premium", "Groceries", "Charge")
 
 
+def _receipt_description(receipt) -> str:
+    """Build a plain-word description for review and Notion."""
+    parts = [receipt.vendor]
+    if receipt.summary:
+        parts.extend([receipt.transaction_type or "", receipt.summary])
+    text = " ".join(parts)
+    return " ".join("".join(c if c.isalnum() or c.isspace() else " " for c in text).split())
+
+
 def _extract_base_merchant_name(name: str) -> str:
     """Strip a trailing transaction-type/plan word from a merchant name."""
     parts = name.strip().split()
@@ -156,9 +165,7 @@ def review_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
         workflow_input = state.get("workflow_input")
         pdf_filename = workflow_input.file_path if workflow_input else "Unknown"
 
-        merchant_description = receipt.vendor
-        if receipt.summary:
-            merchant_description = f"{receipt.vendor} {receipt.transaction_type} ({receipt.summary})"
+        merchant_description = _receipt_description(receipt)
 
         receipt_info = {
             "merchant_name": receipt.vendor,
@@ -214,9 +221,7 @@ def review_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
             raise ValueError(f"Failed to process amount from UI: {e}")
 
         try:
-            original_description = receipt.vendor
-            if receipt.summary:
-                original_description = f"{receipt.vendor} {receipt.transaction_type} ({receipt.summary})"
+            original_description = _receipt_description(receipt)
             if updated_receipt_info["description"] != original_description:
                 merchant_override = updated_receipt_info["description"]
         except (KeyError, TypeError) as e:
@@ -266,7 +271,10 @@ def review_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
         receipt_filename = None
         if receipt_file_path:
             date_str = final_date.strftime("%Y-%m-%d")
-            merchant_clean = final_merchant_description.replace(" ", "_").replace("/", "_")
+            merchant_clean = "_".join("".join(
+                c if c.isalnum() or c.isspace() else " "
+                for c in final_merchant_description
+            ).split())
             receipt_filename = f"{date_str}_{merchant_clean}_${final_amount:.2f}.pdf"
 
         splits = None

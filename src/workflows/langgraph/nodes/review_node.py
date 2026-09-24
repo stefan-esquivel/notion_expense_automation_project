@@ -19,12 +19,18 @@ _MERCHANT_NAME_SUFFIXES = ("Order", "Bill", "Payment", "Premium", "Groceries", "
 
 
 def _receipt_description(receipt) -> str:
-    """Build a plain-word description for review and Notion."""
-    parts = [receipt.vendor]
-    if receipt.summary:
-        parts.extend([receipt.transaction_type or "", receipt.summary])
-    text = " ".join(parts)
-    return " ".join("".join(c if c.isalnum() or c.isspace() else " " for c in text).split())
+    """Preserve merchant punctuation and parenthesized purchase details."""
+    from services.pdf_extractor import PDFExtractor
+
+    summary = PDFExtractor._build_summary(receipt.items) if receipt.items else receipt.summary
+    transaction_type = (receipt.transaction_type or "").strip().title()
+    title = f"{receipt.vendor} {transaction_type}".strip()
+    if summary:
+        summary = summary.strip()
+        if summary.startswith("(") and summary.endswith(")"):
+            summary = summary[1:-1]
+        title += f" ({summary})"
+    return title
 
 
 def _extract_base_merchant_name(name: str) -> str:

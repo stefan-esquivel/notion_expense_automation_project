@@ -317,7 +317,7 @@ class NotionExpenseClient:
     ) -> str:
         """
         Generate a split title following the pattern from CSV examples.
-        Pattern: "[Person]'s [Merchant] [Type] Split ([Details])"
+        Pattern: "[Person]'s [Merchant] [Type] ([Details]) Split"
         """
         return generate_split_title(person_name, merchant_name, description, date)
 

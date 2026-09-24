@@ -56,9 +56,9 @@ def workflow(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize('filename,amount,title', [
-    ('2026-03-07_Amazon_Order_Baking_Sheets_$49.60.pdf', 49.60, "Sam's Amazon Split"),
-    ('2026-03-04_Walmart_Order_Meatballs_$80.59.pdf', 80.59, "Sam's Walmart Food Split"),
-    ('2026-09-19_Longos_Groceries_English_Cucumbers_Dill_Weed_Grape_Tomatoes_$59.90.pdf', 59.90, "Sam's Longo's Groceries Share"),
+    ('2026-03-07_Amazon_Order_Baking_Sheets_$49.60.pdf', 49.60, "Sam's Amazon Order Split"),
+    ('2026-03-04_Walmart_Order_Meatballs_$80.59.pdf', 80.59, "Sam's Walmart Order Split"),
+    ('2026-09-19_Longos_Groceries_English_Cucumbers_Dill_Weed_Grape_Tomatoes_$59.90.pdf', 59.90, "Sam's Longo's Expense Split"),
 ])
 def test_pdf_through_entire_graph(workflow, tmp_path, filename, amount, title):
     api, ui = workflow

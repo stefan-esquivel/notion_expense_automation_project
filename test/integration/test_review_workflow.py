@@ -178,9 +178,9 @@ def test_low_confidence_advisory_is_reviewed_before_commit(workflow, monkeypatch
 
 
 @pytest.mark.parametrize('description,expected', [
-    ('Amazon Order (Baking Sheets)', "Sam's Amazon Order Split (Baking Sheets)"),
-    ('Walmart (Groceries)', "Sam's Walmart Food Split (Groceries)"),
-    ('Netflix', "Sam's Netflix Payment (Jan)"),
+    ('Amazon Order (Baking Sheets)', "Sam's Amazon Order (Baking Sheets) Split"),
+    ('Walmart (Groceries)', "Sam's Walmart (Groceries) Split"),
+    ('Netflix', "Sam's Netflix Split"),
 ])
 def test_shared_titles_reach_preview_and_notion(workflow, description, expected):
     state, ui, api = workflow
@@ -189,3 +189,36 @@ def test_shared_titles_reach_preview_and_notion(workflow, description, expected)
     assert result['status'] == WorkflowStatus.COMPLETED
     assert result['expense_summary'].splits[0].title == expected
     assert api.pages.create.call_args_list[1].kwargs['properties']['Title']['title'][0]['text']['content'] == expected
+
+
+@pytest.mark.parametrize('items,details', [
+    ([('Coho Salmon', 20)], 'Coho Salmon'),
+    ([('Dill', 2), ('COHO SALMON', 20), ('Bread', 4), ('Milk', 6),
+      ('coho salmon', 10), ('Coupon', -2)], 'Coho Salmon, Milk, Bread'),
+])
+def test_longos_titles_from_extraction_to_notion(workflow, monkeypatch, items, details):
+    from services.pdf_extractor import PDFExtractor
+    from domain.models.receipt_item import ReceiptItem
+    state, ui, api = workflow
+    monkeypatch.setattr(Config, 'PARTNER_NAME', 'Lydia')
+    extractor = PDFExtractor()
+    monkeypatch.setattr(extractor, 'extract_items', lambda text: [
+        ReceiptItem(name=name, price=price) for name, price in items])
+    parsed = extractor.parse_receipt(Path('synthetic.pdf'), raw_text="LONGO’S\n2020-01-01\nTOTAL 40.00")
+    state['receipt'] = Receipt(vendor=parsed['merchant_name'],
+                               transaction_type=parsed['transaction_type'],
+                               summary=parsed['summary'], items=parsed['items'],
+                               total=40, date='2020-01-01')
+    result = graph_module.build_graph().invoke(state)
+    assert result['status'] == WorkflowStatus.COMPLETED
+    title = f"Longo's Expense ({details})"
+    split_title = f"Lydia's {title} Split"
+    displayed = ui.review_and_edit.call_args.args[0]
+    assert displayed['merchant_name'] == "Longo's"
+    assert displayed['description'] == title
+    preview, split_preview = ui.display_final_preview.call_args.args
+    assert preview['description'] == title
+    assert split_preview['title'] == split_title
+    expense, split = [call.kwargs['properties'] for call in api.pages.create.call_args_list]
+    assert expense['Merchant / Description']['title'][0]['text']['content'] == title
+    assert split['Title']['title'][0]['text']['content'] == split_title

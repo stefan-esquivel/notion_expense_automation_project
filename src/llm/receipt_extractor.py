@@ -14,9 +14,9 @@ logger = get_logger(__name__)
 
 def llm_extract_receipt(raw_text: str, client: Optional[ReceiptLLMClient] = None) -> Receipt:
     """
-    Extract receipt data using LLM (full extraction).
+    Extract receipt header data using LLM for augmentation.
     
-    Use this when rule-based extraction has low confidence.
+    Use this to recover missing required fields. Items are extracted separately.
     
     Args:
         raw_text: Raw text from PDF
@@ -31,9 +31,6 @@ def llm_extract_receipt(raw_text: str, client: Optional[ReceiptLLMClient] = None
     # Call LLM for extraction
     extracted = client.extract_receipt(raw_text)
     
-    # Convert to Receipt model
-    from uuid import uuid4
-    
     total_val = extracted.get("total_amount")
     try:
         total = float(total_val) if total_val not in (None, "") else None
@@ -43,11 +40,9 @@ def llm_extract_receipt(raw_text: str, client: Optional[ReceiptLLMClient] = None
         total = None
 
     receipt = Receipt(
-        recipt_id=str(uuid4()),  # Convert UUID to string
         vendor=extracted.get("merchant_name", "Unknown"),
         transaction_type=extracted.get("transaction_type", "Purchase"),
         date=extracted.get("date", ""),
-        items=extracted.get("items", []),
         total=total
     )
     

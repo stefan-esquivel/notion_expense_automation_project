@@ -64,7 +64,7 @@ class TestLongosLoyaltyReceiptExtraction:
     def test_merchant_detected_as_longo(self, extractor):
         """Merchant and transaction type follow the workflow extractor contract."""
         result = extractor.parse_receipt(self.FIXTURE_PDF)
-        assert result["transaction_type"] == "expense"
+        assert result["transaction_type"] == "Expense"
         assert result["merchant_name"] == "Longo's"
 
     def test_date_extracted_correctly(self, extractor):

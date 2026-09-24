@@ -71,6 +71,25 @@ class TestAugmentNode:
         assert result["augment_results"].filled_fields == {"date": "llm_extraction"}
         assert result["augment_results"].still_missing == []
 
+    @pytest.mark.unit
+    def test_augment_ignores_malformed_returned_items(self, valid_state):
+        """Unused item data must not prevent recovery of valid header fields."""
+        with patch('llm.receipt_extractor.ReceiptLLMClient') as client_class:
+            client_class.return_value.extract_receipt.return_value = {
+                "merchant_name": "Walmart",
+                "transaction_type": "Order",
+                "date": "2026-05-08",
+                "total_amount": 11.99,
+                "items": [{"product": "Salmon", "price": "not a number"}],
+            }
+            result = augment_node(valid_state)
+
+        assert result["receipt"].date == "2026-05-08"
+        assert result["augment_results"].filled_fields == {"date": "llm_extraction"}
+        assert result["augment_results"].still_missing == []
+        assert result["receipt"].items == [ReceiptItem(name='Milk', price=4.99)]
+        assert result["receipt"].summary == 'Groceries'
+
     def test_augment_node_llm_also_missing_field(self, valid_state):
         """Test a field stays in still_missing if the LLM guess is also empty."""
         llm_guess = Receipt(

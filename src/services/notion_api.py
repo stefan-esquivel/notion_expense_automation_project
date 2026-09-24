@@ -178,13 +178,18 @@ class NotionExpenseClient:
 
         # Upload file to Notion if provided
         if receipt_file_path and receipt_filename:
-            file_id = self._upload_file_to_notion(receipt_file_path, receipt_filename)
+            # Notion file-property display names are limited to 100 characters.
+            attachment_name = receipt_filename
+            if len(attachment_name) > 100:
+                suffix = Path(attachment_name).suffix[:20]
+                attachment_name = attachment_name[:100 - len(suffix)] + suffix
+            file_id = self._upload_file_to_notion(receipt_file_path, attachment_name)
 
             if file_id:
                 properties["Receipt (optional)"] = {
                     "files": [
                         {
-                            "name": receipt_filename,
+                            "name": attachment_name,
                             "file_upload": {
                                 "id": file_id
                             }
@@ -312,7 +317,7 @@ class NotionExpenseClient:
     ) -> str:
         """
         Generate a split title following the pattern from CSV examples.
-        Pattern: "[Person]'s [Merchant] [Type] Split ([Details])"
+        Pattern: "[Person]'s [Merchant] [Type] ([Details]) Split"
         """
         return generate_split_title(person_name, merchant_name, description, date)
 

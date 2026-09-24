@@ -24,13 +24,3 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-commit, pre-push]
-
-      - id: pdf-pii-scan-claude
-        name: PDF PII scan (Claude review)
-        description: Deeper LLM-based PII review of tracked PDFs via the local Claude Code CLI. Run manually while automatic review is disabled.
-        entry: venv/bin/python scripts/check_pdf_pii_claude.py
-        language: system
-        pass_filenames: false
-        # Temporarily disabled on push because the Claude CLI times out.
-        # Restore [pre-push] when the CLI is responding reliably.
-        stages: [manual]

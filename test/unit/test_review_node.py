@@ -311,7 +311,7 @@ class TestReviewNode:
         result = review_node(valid_state)
         
         # Split should be: "Jane's Walmart Food Split (Groceries)"
-        assert result["expense_summary"].splits[0].title == "Jane Doe's Walmart Food Split (Groceries)"
+        assert result["expense_summary"].splits[0].title == "Jane Doe's Walmart Order (Groceries) Split"
     
     def test_review_node_split_title_without_summary(self, valid_state, mock_config, mock_ui):
         """Test split title generation when description has no summary."""
@@ -329,7 +329,7 @@ class TestReviewNode:
         result = review_node(valid_state)
         
         # Split should be: "Jane's Walmart Food Split"
-        assert result["expense_summary"].splits[0].title == "Jane Doe's Walmart Food Split"
+        assert result["expense_summary"].splits[0].title == "Jane Doe's Walmart Order Split"
     
     def test_review_node_generates_receipt_filename(self, valid_state, mock_config, mock_ui):
         """Test that receipt filename is properly generated."""
@@ -346,8 +346,8 @@ class TestReviewNode:
         
         result = review_node(valid_state)
         
-        # Filename should be: 2026-05-08_Walmart_Order_(Groceries)_$11.99.pdf
-        assert result["expense_summary"].receipt_filename == "2026-05-08_Walmart_Order_(Groceries)_$11.99.pdf"
+        # Filename should be: 2026-05-08_Walmart_Order_Groceries_$11.99.pdf
+        assert result["expense_summary"].receipt_filename == "2026-05-08_Walmart_Order_Groceries_$11.99.pdf"
     
     def test_review_node_displays_final_preview(self, valid_state, mock_config, mock_ui):
         """Test that final preview is displayed to user."""
@@ -521,3 +521,11 @@ class TestReviewNode:
         assert kwargs["originally_missing"] == []
         assert kwargs["filled_fields"] == {}
         assert kwargs["still_missing"] == []
+
+
+@pytest.mark.unit
+def test_generated_description_preserves_punctuation():
+    from workflows.langgraph.nodes.review_node import _receipt_description
+    receipt = Receipt(vendor="Longo's", transaction_type="expense", date="2020-01-01",
+                      summary="Coho Salmon", total=12)
+    assert _receipt_description(receipt) == "Longo's Expense (Coho Salmon)"

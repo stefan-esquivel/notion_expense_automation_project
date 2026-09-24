@@ -624,7 +624,7 @@ class TestNotionExpenseClient:
             description="Groceries (Meatballs)",
             date=datetime(2026, 3, 10)
         )
-        assert title == "Alice's Walmart Food Split (Meatballs)"
+        assert title == "Alice's Groceries (Meatballs) Split"
     
     def test_generate_split_title_amazon(self, notion_client):
         """Test split title generation for Amazon"""
@@ -634,7 +634,7 @@ class TestNotionExpenseClient:
             description="Kitchen supplies (Baking Sheets)",
             date=datetime(2026, 3, 7)
         )
-        assert title == "Bob's Amazon Order Split (Baking Sheets)"
+        assert title == "Bob's Kitchen supplies (Baking Sheets) Split"
     
     def test_generate_split_title_electrical(self, notion_client):
         """Test split title generation for electrical bill"""
@@ -644,7 +644,7 @@ class TestNotionExpenseClient:
             description="Monthly bill",
             date=datetime(2026, 3, 10)
         )
-        assert title == "Alice's Electrical Bill Split (Mar)"
+        assert title == "Alice's Monthly bill Split"
     
     def test_generate_split_title_rent(self, notion_client):
         """Test split title generation for rent"""
@@ -654,7 +654,7 @@ class TestNotionExpenseClient:
             description="Monthly rent",
             date=datetime(2026, 2, 1)
         )
-        assert title == "Bob's Rent Split (Feb)"
+        assert title == "Bob's Monthly rent Split"
     
     def test_generate_split_title_netflix(self, notion_client):
         """Test split title generation for Netflix"""
@@ -664,7 +664,7 @@ class TestNotionExpenseClient:
             description="Subscription",
             date=datetime(2026, 1, 15)
         )
-        assert title == "Alice's Netflix Payment (Jan)"
+        assert title == "Alice's Subscription Split"
     
     def test_generate_split_title_youtube(self, notion_client):
         """Test split title generation for YouTube Premium"""
@@ -674,7 +674,7 @@ class TestNotionExpenseClient:
             description="Subscription",
             date=datetime(2026, 3, 10)
         )
-        assert title == "Bob's YT Premium Split (Mar)"
+        assert title == "Bob's Subscription Split"
     
     def test_generate_split_title_parking(self, notion_client):
         """Test split title generation for parking"""
@@ -684,7 +684,7 @@ class TestNotionExpenseClient:
             description="Monthly parking",
             date=datetime(2026, 3, 10)
         )
-        assert title == "Alice's Parking Share (Mar)"
+        assert title == "Alice's Monthly parking Split"
     
     def test_generate_split_title_longos(self, notion_client):
         """Test split title generation for Longo's"""
@@ -694,7 +694,7 @@ class TestNotionExpenseClient:
             description="Groceries",
             date=datetime(2026, 3, 10)
         )
-        assert title == "Bob's Longo's Groceries Share"
+        assert title == "Bob's Groceries Split"
     
     def test_generate_split_title_tv(self, notion_client):
         """Test split title generation for TV payment"""
@@ -704,7 +704,7 @@ class TestNotionExpenseClient:
             description="Cable bill",
             date=datetime(2026, 3, 10)
         )
-        assert title == "Alice's TV Payment (Mar)"
+        assert title == "Alice's Cable bill Split"
     
     def test_generate_split_title_generic(self, notion_client):
         """Test split title generation for generic merchant"""
@@ -714,7 +714,7 @@ class TestNotionExpenseClient:
             description="Purchase",
             date=datetime(2026, 3, 10)
         )
-        assert title == "Bob's Generic Store Split"
+        assert title == "Bob's Purchase Split"
     
     def test_generate_split_title_generic_with_details(self, notion_client):
         """Test split title generation for generic merchant with details"""
@@ -724,7 +724,7 @@ class TestNotionExpenseClient:
             description="Tools (Hammer and Nails)",
             date=datetime(2026, 3, 10)
         )
-        assert title == "Alice's Hardware Store Split (Hammer and Nails)"
+        assert title == "Alice's Tools (Hammer and Nails) Split"
     
     def test_test_connection_success(self, notion_client):
         """Test successful connection test"""
@@ -758,3 +758,17 @@ class TestNotionExpenseClient:
         assert any("Notion API connection test failed" in record.message for record in caplog.records)
 
 
+
+@pytest.mark.unit
+@pytest.mark.parametrize('length', [99, 100, 120])
+def test_attachment_display_name_respects_notion_limit(notion_client, length):
+    filename = 'x' * (length - 4) + '.pdf'
+    with patch.object(notion_client, '_upload_file_to_notion', return_value='upload-id') as upload:
+        notion_client.create_expense_entry(
+            'Electricity Bill', datetime(2026, 9, 23), 50.0, 'Alice',
+            Path('/test/receipt.pdf'), filename,
+        )
+    properties = notion_client.client.pages.create.call_args.kwargs['properties']
+    name = properties['Receipt (optional)']['files'][0]['name']
+    assert name == 'x' * (min(length, 100) - 4) + '.pdf'
+    assert upload.call_args.args[1] == name

@@ -37,13 +37,15 @@ wheels/
 # Logs
 logs/*.log
 
-# Receipts (keep structure but not actual files)
-receipts/input/*.pdf
-receipts/processed/**/*.pdf
-receipts/test_input/*
-receipts/test_processed/*
-!receipts/test_input/.gitkeep
-!receipts/test_processed/.gitkeep
+# Receipts (keep structure but not contents)
+receipts/input/**
+receipts/processed/**
+receipts/test_input/**
+receipts/test_processed/**
+
+# Allow directories and their .gitkeep placeholders
+!receipts/**/
+!receipts/**/.gitkeep
 
 # OS
 .DS_Store

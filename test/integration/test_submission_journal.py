@@ -110,3 +110,36 @@ def test_preflight_separates_scopes_and_ignores_archive_location(tmp_path):
     assert path.read_bytes() == before  # Preflight uses a read-only connection.
     archived.unlink()
     assert journal.find_completed(scope, receipt_hash) == '1' * 32
+
+
+def test_payload_can_change_before_any_request(tmp_path):
+    path = tmp_path / 'journal.sqlite3'
+    with SubmissionJournal(path) as journal:
+        key = journal.prepare('qa', 'hash', {'amount': 12})
+    with SubmissionJournal(path) as journal:
+        assert journal.prepare('qa', 'hash', {'amount': 15}) == key
+        assert journal.inspect(key)['payload'] == {'amount': 15}
+
+
+def test_corrected_payload_allowed_after_confirmed_non_creation(tmp_path):
+    with SubmissionJournal(tmp_path / 'journal.sqlite3') as journal:
+        key = journal.prepare('qa', 'hash', {'amount': 12})
+        with pytest.raises(RuntimeError, match='uncertain'):
+            journal.run(key, 'expense', Mock(side_effect=TimeoutError()), creates_page=True)
+        journal.reconcile(key, 'expense', confirmed_not_created=True)
+        assert journal.prepare('qa', 'hash', {'amount': 15}) == key
+        assert journal.inspect(key)['payload'] == {'amount': 15}
+
+
+@pytest.mark.parametrize('name,status', [
+    ('expense', 'completed'), ('expense', 'uncertain'),
+    ('split:0', 'pending'), ('link:0', 'pending'),
+])
+def test_payload_change_preserves_existing_progress(tmp_path, name, status):
+    with SubmissionJournal(tmp_path / 'journal.sqlite3') as journal:
+        key = journal.prepare('qa', 'hash', {'amount': 12})
+        journal._record(key, name, status)
+        before = journal.inspect(key)
+        with pytest.raises(RuntimeError, match='approved data changed'):
+            journal.prepare('qa', 'hash', {'amount': 15})
+        assert journal.inspect(key) == before

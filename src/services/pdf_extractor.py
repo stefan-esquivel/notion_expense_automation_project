@@ -33,7 +33,7 @@ class PDFExtractor:
             'netflix': r'netflix',
             'youtube': r'youtube',
             'parking': r'parking',
-            'longo': r"longo'?s",
+            'longo': r"longo[’' ]?s",
             'tv': r'(television|tv|cable)',
         }
         
@@ -75,7 +75,7 @@ class PDFExtractor:
                 elif merchant_type == 'parking':
                     return ('parking', 'Parking')
                 elif merchant_type == 'longo':
-                    return ('expense', "Longo's")
+                    return ('Expense', "Longo's")
         
         return ('unknown', 'Unknown Merchant')
     
@@ -162,10 +162,18 @@ class PDFExtractor:
     
     @staticmethod
     def _build_summary(items: List[ReceiptItem]) -> str:
-        """Return a comma-joined summary of the first three item names, or empty string."""
-        if not items:
-            return ""
-        return ', '.join(item.name for item in items[:3])
+        """Summarize up to three distinct purchases, ranked by line-item value."""
+        names = []
+        seen = set()
+        for item in sorted(items, key=lambda item: item.price, reverse=True):
+            name = item.name.strip()
+            if item.price <= 0 or not name or name.casefold() in seen:
+                continue
+            seen.add(name.casefold())
+            names.append(name.title() if name.isupper() or name.islower() else name)
+            if len(names) == 3:
+                break
+        return ', '.join(names)
 
     def extract_items(self, text: str) -> List[ReceiptItem]:
         """

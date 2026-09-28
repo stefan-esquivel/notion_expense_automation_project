@@ -3,8 +3,11 @@ Unit tests for file_organizer.py
 Tests file organization logic with mocked filesystem operations.
 """
 import pytest
+import sys
+from pathlib import Path
 from datetime import datetime
-from src.services.file_organizer import FileOrganizer
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'src'))
+from services.file_organizer import FileOrganizer
 
 
 @pytest.mark.unit
@@ -173,3 +176,33 @@ class TestFileOrganizer:
             
             assert result_path.parent.parent.name == expected_month
 
+
+    @pytest.mark.parametrize('length', [99, 100, 101])
+    def test_filename_length_boundaries(self, organizer, length):
+        merchant = 'M' * (length - len('2026-02-15__$45.67.pdf'))
+        filename = organizer.generate_filename(datetime(2026, 2, 15), merchant, '', 45.67, 'receipt.pdf')
+        assert len(filename) == min(length, 100)
+        assert filename.startswith('2026-02-15_')
+        assert filename.endswith('_$45.67.pdf')
+
+    @pytest.mark.parametrize('merchant, description', [
+        ('Merchant' * 60, 'Details' * 80),
+        ('Café 商店' * 60, '购买' * 100),
+        ('Shop /:*?"<>|', ''),
+    ])
+    def test_long_duplicate_names_preserve_identity(self, organizer, tmp_path, merchant, description):
+        paths = []
+        for index in range(12):
+            source = tmp_path / 'receipt.pdf'
+            source.write_text(f'receipt {index}')
+            path = organizer.organize_file(source, datetime(2026, 2, 15), merchant, description, 45.67)
+            assert len(path.name) <= 100
+            assert len(path.name.encode('utf-8')) <= 255
+            assert path.name.startswith('2026-02-15_')
+            assert '$45.67' in path.name
+            assert path.suffix == '.pdf'
+            assert not any(c in path.name for c in '/:*?"<>|')
+            paths.append(path)
+        assert len(set(paths)) == 12
+        for index, path in enumerate(paths):
+            assert path.read_text() == f'receipt {index}'

@@ -111,13 +111,14 @@ class SubmissionJournal:
             # No create was attempted, or the initial expense was definitively
             # rejected (including an operator-confirmed non-creation). Once any
             # later operation exists, preserve the original approved payload.
-            can_revise = not row['archive_path'] and all(
+            # A filename planned before upload is not an archived receipt.
+            can_revise = (not row['archive_path'] or not Path(row['archive_path']).exists()) and all(
                 operation['name'] == 'expense' and operation['status'] == 'pending'
                 for operation in operations)
             if not can_revise:
                 raise RuntimeError(f'Submission {submission_id}: approved data changed; reconcile before resubmitting')
             with self.db:
-                self.db.execute('UPDATE submissions SET payload=?,source=? WHERE id=?',
+                self.db.execute('UPDATE submissions SET payload=?,source=?,archive_path=NULL WHERE id=?',
                                 (encoded, str(source.resolve()) if source else None, submission_id))
         with self.db:
             self.db.execute('INSERT OR IGNORE INTO submissions(id,scope,receipt_hash,payload,source) VALUES(?,?,?,?,?)',

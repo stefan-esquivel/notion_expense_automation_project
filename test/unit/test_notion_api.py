@@ -760,7 +760,7 @@ class TestNotionExpenseClient:
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize('length', [99, 100, 120])
+@pytest.mark.parametrize('length', [99, 100, 101, 120])
 def test_attachment_display_name_respects_notion_limit(notion_client, length):
     filename = 'x' * (length - 4) + '.pdf'
     with patch.object(notion_client, '_upload_file_to_notion', return_value='upload-id') as upload:
@@ -771,4 +771,20 @@ def test_attachment_display_name_respects_notion_limit(notion_client, length):
     properties = notion_client.client.pages.create.call_args.kwargs['properties']
     name = properties['Receipt (optional)']['files'][0]['name']
     assert name == 'x' * (min(length, 100) - 4) + '.pdf'
+    assert upload.call_args.args[1] == name
+
+
+@pytest.mark.unit
+def test_attachment_guard_preserves_date_amount_and_collision_suffix(notion_client):
+    filename = '2026-09-23_' + 'Merchant' * 30 + '_$50.00_10.pdf'
+    with patch.object(notion_client, '_upload_file_to_notion', return_value='upload-id') as upload:
+        notion_client.create_expense_entry(
+            'Merchant', datetime(2026, 9, 23), 50.0, 'Alice',
+            Path('/test/receipt.pdf'), filename,
+        )
+    properties = notion_client.client.pages.create.call_args.kwargs['properties']
+    name = properties['Receipt (optional)']['files'][0]['name']
+    assert len(name) == 100
+    assert name.startswith('2026-09-23_')
+    assert name.endswith('_$50.00_10.pdf')
     assert upload.call_args.args[1] == name

@@ -11,6 +11,7 @@ from domain.models.expense import ExpenseSummary, SplitDetail
 from config import Config
 from services.ui import ExpenseUI, OVERRIDE_SENTINEL, SKIP_SENTINEL
 from services.split_titles import generate_split_title
+from services.file_organizer import FileOrganizer
 from logger import get_logger
 
 logger = get_logger(__name__)
@@ -276,12 +277,11 @@ def review_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
 
         receipt_filename = None
         if receipt_file_path:
-            date_str = final_date.strftime("%Y-%m-%d")
-            merchant_clean = "_".join("".join(
-                c if c.isalnum() or c.isspace() else " "
-                for c in final_merchant_description
-            ).split())
-            receipt_filename = f"{date_str}_{merchant_clean}_${final_amount:.2f}.pdf"
+            receipt_filename = FileOrganizer(Path(Config.PROCESSED_FOLDER)).plan_destination(
+                receipt_file_path, final_date,
+                final_merchant_description.split("(")[0].strip(),
+                final_merchant_description, final_amount,
+            ).name
 
         splits = None
         if use_split:

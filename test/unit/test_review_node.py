@@ -53,9 +53,10 @@ class TestReviewNode:
     """Test suite for review_node functionality."""
     
     @pytest.fixture
-    def mock_config(self):
+    def mock_config(self, tmp_path):
         """Mock Config values."""
         with patch('workflows.langgraph.nodes.review_node.Config') as mock:
+            mock.PROCESSED_FOLDER = tmp_path / 'processed'
             mock.YOUR_NAME = "Jon Doe"
             mock.PARTNER_NAME = "Jane Doe"
             mock.DEFAULT_SPLIT_PERCENTAGE = 50.0

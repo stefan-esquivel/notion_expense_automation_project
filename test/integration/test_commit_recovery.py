@@ -189,6 +189,7 @@ def test_archive_collision_never_overwrites_other_content(submission, monkeypatc
     from services.file_organizer import FileOrganizer
     original = FileOrganizer.organize_file
     def collide(self, **kwargs):
+        kwargs['destination_path'].parent.mkdir(parents=True, exist_ok=True)
         kwargs['destination_path'].write_bytes(b'another receipt')
         return original(self, **kwargs)
     monkeypatch.setattr(FileOrganizer, 'organize_file', collide)
@@ -231,6 +232,7 @@ def test_corrected_payload_retries_after_expense_rejection(submission):
     sent = api.pages.create.call_args_list[1].kwargs['properties']
     assert sent['Merchant / Description']['title'][0]['text']['content'] == 'Shop Tools'
     assert sent['Amount']['number'] == 12
+    assert result['results'].archive_path.name == '2020-01-02_Shop_Tools_$12.00.pdf'
     with journal:
         after = journal.inspect(first['submission_id'])
     assert after['payload']['merchant_description'] == 'Shop Tools'

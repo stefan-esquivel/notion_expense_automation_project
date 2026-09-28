@@ -245,3 +245,43 @@ def test_moving_archived_receipt_back_to_input_still_skips(workflow, tmp_path, m
     ui.review_and_edit.assert_not_called()
     assert api.pages.create.call_count == 2
     assert source.exists()
+
+
+@pytest.mark.parametrize('description', [
+    'Shop (' + 'Details' * 80 + ')',
+    'Merchant' * 60,
+    'Café 商店' * 60 + ' (' + '购买' * 100 + ')',
+    'Shop /:*?"<>|',
+])
+@pytest.mark.parametrize('duplicate', [False, True])
+def test_review_upload_and_archive_share_fitted_name(workflow, tmp_path, description, duplicate):
+    from datetime import datetime
+    from services.file_organizer import FileOrganizer
+    from services.notion_api import NotionExpenseClient
+
+    api, ui = workflow
+    source = tmp_path / 'receipt.pdf'
+    shutil.copyfile(FIXTURES / '2026-03-04_Walmart_Order_Meatballs_$80.59.pdf', source)
+    ui.review_and_edit.side_effect = lambda info: dict(info, description=description)
+    existing = None
+    if duplicate:
+        existing = FileOrganizer(Config.PROCESSED_FOLDER).plan_destination(
+            source, datetime(2026, 3, 4), description.split('(')[0].strip(), description, 80.59)
+        existing.parent.mkdir(parents=True, exist_ok=True)
+        existing.write_bytes(b'previous receipt')
+    result = build_graph().invoke(create_initial_state(str(source)))
+    assert result['status'] == WorkflowStatus.COMPLETED, result.get('failure_reason')
+    preview_name = ui.display_final_preview.call_args.args[0]['receipt_filename']
+    upload_name = NotionExpenseClient._upload_file_to_notion.call_args.args[1]
+    attachment_name = api.pages.create.call_args_list[0].kwargs['properties']['Receipt (optional)']['files'][0]['name']
+    archive = result['results'].archive_path
+    assert preview_name == upload_name == attachment_name == archive.name
+    assert len(archive.name) <= 100
+    assert archive.name.startswith('2026-03-04_')
+    assert '$80.59' in archive.name
+    assert archive.suffix == '.pdf'
+    assert archive.is_file()
+    assert not source.exists()
+    if existing:
+        assert existing.read_bytes() == b'previous receipt'
+        assert archive != existing

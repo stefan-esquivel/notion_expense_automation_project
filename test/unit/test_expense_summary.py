@@ -8,6 +8,10 @@ from src.domain.models.expense import ExpenseSummary
 @pytest.mark.unit
 @pytest.mark.parametrize('filename, expected', [
     (None, None),
+    ('2026-09-23_' + 'x' * 120 + '_$84.39.pdf',
+     '2026-09-23_' + 'x' * 78 + '_$84.39.pdf'),
+    ('2026-09-23_' + 'x' * 120 + '_$84.39_10.pdf',
+     '2026-09-23_' + 'x' * 75 + '_$84.39_10.pdf'),
     ('receipt.pdf', 'receipt.pdf'),
     ('x' * 96 + '.pdf', 'x' * 96 + '.pdf'),
     ('x' * 116 + '.pdf', 'x' * 96 + '.pdf'),

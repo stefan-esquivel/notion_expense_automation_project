@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+from domain.receipt_filename import fit_receipt_filename
 
 
 class FileOrganizer:
@@ -43,7 +44,7 @@ class FileOrganizer:
         else:
             filename = f"{date_str}_{clean_merchant}_{amount_str}.pdf"
         
-        return filename
+        return fit_receipt_filename(filename)
     
     def _sanitize_filename(self, text: str) -> str:
         """Remove or replace characters that are invalid in filenames."""
@@ -72,7 +73,7 @@ class FileOrganizer:
         if not sanitized:
             return 'unknown'
         
-        return sanitized
+        return sanitized.encode('utf-8')[:255].decode('utf-8', errors='ignore')
     
     def plan_destination(
         self,
@@ -84,7 +85,7 @@ class FileOrganizer:
     ) -> Path:
         """
         Choose an unused destination in processed/YYYY/MMM/vendor/filename.pdf.
-        Creates the destination directory without moving the source.
+        Does not create directories or move the source.
         
         Example: receipts/processed/2026/Feb/walmart/receipt_2026-02-15.pdf
         """
@@ -98,9 +99,6 @@ class FileOrganizer:
         # Create vendor folder
         vendor_folder_name = self._sanitize_vendor_name(merchant_name)
         vendor_folder = month_folder / vendor_folder_name
-        
-        # Create all folders in hierarchy
-        vendor_folder.mkdir(parents=True, exist_ok=True)
         
         # Generate new filename
         new_filename = self.generate_filename(
@@ -116,7 +114,7 @@ class FileOrganizer:
             ext = dest_path.suffix
             counter = 1
             while dest_path.exists():
-                dest_path = vendor_folder / f"{base}_{counter}{ext}"
+                dest_path = vendor_folder / fit_receipt_filename(f"{base}_{counter}{ext}")
                 counter += 1
         
         return dest_path

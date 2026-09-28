@@ -10,6 +10,7 @@ import httpx
 from notion_client import Client
 from notion_client.errors import APIResponseError
 from services.split_titles import generate_split_title
+from domain.receipt_filename import fit_receipt_filename
 from services.notion_retry import notion_request
 from config import Config
 from logger import get_logger
@@ -179,10 +180,7 @@ class NotionExpenseClient:
         # Upload file to Notion if provided
         if receipt_file_path and receipt_filename:
             # Notion file-property display names are limited to 100 characters.
-            attachment_name = receipt_filename
-            if len(attachment_name) > 100:
-                suffix = Path(attachment_name).suffix[:20]
-                attachment_name = attachment_name[:100 - len(suffix)] + suffix
+            attachment_name = fit_receipt_filename(receipt_filename)
             file_id = self._upload_file_to_notion(receipt_file_path, attachment_name)
 
             if file_id:

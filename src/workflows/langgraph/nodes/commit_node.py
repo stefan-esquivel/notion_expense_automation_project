@@ -120,6 +120,14 @@ def commit_node(state: ReceiptWorkflowState) -> ReceiptWorkflowState:
             payload['balance_page_id'] = Config.BALANCES_PAGE_ID.replace('-', '').lower()
             submission_id = journal.prepare(scope, receipt_hash, payload, source)
             state["submission_id"] = submission_id
+            if source:
+                destination = journal.archive_destination(submission_id, lambda: FileOrganizer(
+                    Path(Config.PROCESSED_FOLDER)).plan_destination(
+                    source, expense_summary.date,
+                    expense_summary.merchant_description.split("(")[0].strip(),
+                    expense_summary.merchant_description, expense_summary.amount,
+                ))
+                expense_summary.receipt_filename = destination.name
             expense_page_id, split_ids = _commit_to_notion(notion_client, expense_summary, journal, submission_id)
             organized_path = _organize_receipt_file(expense_summary, journal, submission_id, receipt_hash)
             state["results"] = WorkflowResults(

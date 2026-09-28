@@ -87,42 +87,37 @@ class PDFExtractor:
     def extract_amount(self, text: str) -> Optional[float]:
         """Extract the total amount from receipt text.
 
-        Strategy:
-        1. Scan every line for one explicitly labelled "Total" (case-insensitive)
-           that does NOT also contain a noise keyword (loyalty/hold lines).
-           Return the first such amount found.
-        2. Fall back to collecting all dollar amounts in the document and
-           returning the largest one.
+        Prefer clean labelled totals, then labelled amounts, then the largest
+        currency amount. Check complete lines so trailing hold/rewards text
+        cannot disguise a non-transaction amount as a total.
         """
-        # --- Pass 1: look for a clean "Total" line ---
-        total_line_pattern = re.compile(
-            r'^[^\S\r\n]*total[^\S\r\n]*[\$:]?\s*(?:CA)?\$?\s*(\d+[,\d]*\.?\d{2})',
-            re.IGNORECASE | re.MULTILINE,
-        )
-        for match in total_line_pattern.finditer(text):
-            line = match.group(0)
-            if not any(kw in line.lower() for kw in self._NOISE_KEYWORDS):
-                amount_str = match.group(1).replace(',', '')
-                try:
-                    return float(amount_str)
-                except ValueError:
-                    continue
-
-        # --- Pass 2: fall back to max of all amounts ---
+        currency = r'(?:CAD\b|CA\s*\$|\$)'
+        labelled_number = r'(\d+[,\d]*\.?\d{2})'
+        decimal_number = r'(\d+[,\d]*\.\d{2})'
         patterns = [
-            r'(?:total|amount|grand total)[\s:]*(?:CA)?\$?\s*(\d+[,\d]*\.?\d{2})',
-            r'(?:CA)?\$\s*(\d+[,\d]*\.\d{2})',
-            r'(\d+[,\d]*\.\d{2})\s*(?:CAD|CA\$)',
+            # Preserve priority for explicit total lines, including grand totals.
+            rf'^[^\S\r\n]*(?:grand\s+)?total\b[\s:]*'
+            rf'(?:{currency})?\s*{labelled_number}',
+            rf'\b(?:grand\s+total|total|amount)\b[\s:]*'
+            rf'(?:{currency})?\s*{labelled_number}',
+            rf'{currency}\s*{decimal_number}',
+            rf'{decimal_number}\s*(?:CAD\b|CA\s*\$)',
         ]
 
         amounts = []
-        for pattern in patterns:
-            for match in re.finditer(pattern, text, re.IGNORECASE):
-                amount_str = match.group(1).replace(',', '')
-                try:
-                    amounts.append(float(amount_str))
-                except ValueError:
+        for index, pattern in enumerate(patterns):
+            for match in re.finditer(pattern, text, re.IGNORECASE | re.MULTILINE):
+                # Include text before and after the match, plus any intervening
+                # lines when the label and amount are on separate lines.
+                start = text.rfind('\n', 0, match.start()) + 1
+                end = text.find('\n', match.end())
+                line = text[start:end if end != -1 else len(text)]
+                if any(kw in line.lower() for kw in self._NOISE_KEYWORDS):
                     continue
+                amount = float(match.group(1).replace(',', ''))
+                if index < 2:
+                    return amount
+                amounts.append(amount)
 
         return max(amounts) if amounts else None
     

@@ -84,6 +84,26 @@ def test_pdf_through_entire_graph(workflow, tmp_path, filename, amount, title):
     assert api.pages.create.call_count == 2
 
 
+@pytest.mark.parametrize('total_line', [
+    'Total: CAD 65.41', 'Grand Total CA$65.41', 'Total CA $65.41',
+])
+def test_cad_total_reaches_review_and_submission(workflow, tmp_path, total_line):
+    api, ui = workflow
+    source = tmp_path / 'receipt.pdf'
+    shutil.copyfile(FIXTURES / '2026-03-04_Walmart_Order_Meatballs_$80.59.pdf', source)
+    state = create_initial_state(str(source))
+    state['workflow_input'].raw_text = (
+        f'Walmart\n2026-03-04\n{total_line}\n'
+        'Temporary hold\n$68.29\nRewards $100.00\n'
+    )
+    result = build_graph().invoke(state)
+    assert result['status'] == WorkflowStatus.COMPLETED, result.get('failure_reason')
+    assert result['receipt'].total == 65.41
+    ui.review_and_edit.assert_called_once()
+    assert ui.review_and_edit.call_args.args[0]['amount'] == 65.41
+    assert api.pages.create.call_args_list[0].kwargs['properties']['Amount']['number'] == 65.41
+
+
 def test_invalid_pdf_stops_before_submission(workflow, tmp_path):
     api, ui = workflow
     source = tmp_path / 'broken.pdf'

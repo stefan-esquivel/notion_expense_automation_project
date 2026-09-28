@@ -134,6 +134,40 @@ class TestPDFExtractor:
 
         assert amount is None
 
+    @pytest.mark.parametrize('label', ['Total:', 'Grand Total', 'Amount:', 'Receipt Total:'])
+    @pytest.mark.parametrize('prefix', ['CAD ', 'CA$', 'CA $', '$', 'cAd\t', 'ca\t$ '])
+    def test_currency_totals_take_precedence_over_noise(self, extractor, label, prefix):
+        text = (
+            'Subtotal $70.00\nTemporary hold\n$100.00\n'
+            f'  {label} {prefix}65.41\n'
+            'Rewards $200.00\nSavings $300.00\n'
+        )
+        assert extractor.extract_amount(text) == 65.41
+
+    @pytest.mark.parametrize('text', [
+        'tOtAl:\tCaD\t1,234.56',
+        'Grand Total\nCA $1,234.56',
+        'Total: 1,234.56 CAD',
+        'Total: 1,234.56',
+    ])
+    def test_currency_total_whitespace_case_and_commas(self, extractor, text):
+        assert extractor.extract_amount(text + '\nTemporary hold $2,000.00') == 1234.56
+
+    @pytest.mark.parametrize('text', [
+        'Paid CAD 65.41', 'Paid CA$65.41', 'Paid CA $65.41',
+        'Paid $65.41', 'Paid 65.41 CAD', 'Paid 65.41 CA $',
+    ])
+    def test_currency_fallback_formats(self, extractor, text):
+        assert extractor.extract_amount(text) == 65.41
+
+    @pytest.mark.parametrize('noise', ['temporary hold', 'rewards', 'savings', 'points', 'spent'])
+    def test_checks_entire_total_line_for_noise(self, extractor, noise):
+        text = f'Total: CAD 100.00 ({noise})\nGrand Total: CAD 65.41'
+        assert extractor.extract_amount(text) == 65.41
+
+    def test_subtotal_is_not_a_total_label(self, extractor):
+        assert extractor.extract_amount('Subtotal CAD 80.00\nAmount: CAD 65.41') == 65.41
+
     def test_extract_amount_ignores_loyalty_total_spent(self, extractor):
         """Loyalty 'Total spent' should not override the transaction Total (issue #47)."""
         text = (

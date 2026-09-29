@@ -195,20 +195,20 @@ class PDFExtractor:
             items_data = result.get("items", [])
             
             # Convert to ReceiptItem objects
-            grocery_items = []
+            receipt_items = []
             for item_data in items_data:
                 try:
-                    grocery_item = ReceiptItem(
+                    receipt_item = ReceiptItem(
                         name=item_data.get("name", "Unknown"),
                         price=float(item_data.get("price", 0.0)),
                         category=item_data.get("category")
                     )
-                    grocery_items.append(grocery_item)
+                    receipt_items.append(receipt_item)
                 except Exception as e:
                     logger.warning(f"Failed to parse item {item_data}: {e}")
                     continue
             
-            return grocery_items
+            return receipt_items
             
         except Exception as e:
             logger.warning(f"LLM item extraction failed: {e}")

@@ -161,8 +161,14 @@ class TestPDFExtractor:
         assert extractor.extract_amount(text) == 65.41
 
     @pytest.mark.parametrize('noise', ['temporary hold', 'rewards', 'savings', 'points', 'spent'])
-    def test_checks_entire_total_line_for_noise(self, extractor, noise):
-        text = f'Total: CAD 100.00 ({noise})\nGrand Total: CAD 65.41'
+    @pytest.mark.parametrize('currency', ['CAD ', '$'])
+    def test_checks_entire_total_line_for_noise(self, extractor, noise, currency):
+        text = f'Total: {currency}100.00 ({noise})\nGrand Total: {currency}65.41'
+        assert extractor.extract_amount(text) == 65.41
+
+    @pytest.mark.parametrize('noise', ['temporary hold', 'rewards', 'savings', 'points', 'spent'])
+    def test_currency_fallback_checks_entire_line_for_noise(self, extractor, noise):
+        text = f'$100.00 ({noise})\nPaid $65.41'
         assert extractor.extract_amount(text) == 65.41
 
     def test_subtotal_is_not_a_total_label(self, extractor):
